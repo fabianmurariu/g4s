@@ -1,4 +1,5 @@
 package com.github.fabianmurariu.g4s.sparse.grb
+
 import com.github.fabianmurariu.unsafe.GRBALG
 import scala.{specialized => sp}
 

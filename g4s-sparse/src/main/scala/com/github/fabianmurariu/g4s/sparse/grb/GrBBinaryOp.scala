@@ -10,28 +10,69 @@ import com.github.fabianmurariu.unsafe.GRAPHBLAS
   *
   * used to create monoids
   * used for accumulators
-  */
-case class GrBBinaryOp[A, B, C](private[grb] val pointer: Buffer)
-
-abstract class BuiltInBoolBinaryOps[T] {
-  val eq: GrBBinaryOp[T, T, Boolean]
+ */
+sealed trait GrBBinaryOp[A, B, C] {
+  private[grb] def pointer:Buffer
 }
+// some special ops can be found via implicits
+case class EqOp[A](private[grb] val pointer: Buffer) extends GrBBinaryOp[A, A, Boolean]
+case class GrBDefaultBinaryOp[A, B, C](private[grb] val pointer: Buffer) extends GrBBinaryOp[A, B, C]
 
 /**
   * Default BinaryOps (T, T) -> T
   */
-abstract class BuiltInBinaryOps[T] extends BuiltInBoolBinaryOps[T] {
-
-  val first: GrBBinaryOp[T, T, T]
+abstract class BuiltInBoolBinaryOps[T] {
+    def eq: GrBBinaryOp[T, T, Boolean]
+    def ne: GrBBinaryOp[T, T, Boolean]
+    def gt: GrBBinaryOp[T, T, Boolean]
+    def lt: GrBBinaryOp[T, T, Boolean]
+    def ge: GrBBinaryOp[T, T, Boolean]
+    def le: GrBBinaryOp[T, T, Boolean]
 }
 
-// sealed trait Op[A, B, C]
-// sealed trait GrBOp[A, B, C] extends Op[A, B, C]
+abstract class BuiltInBinaryOps[T] extends BuiltInBoolBinaryOps[T] {
+
+    def first: GrBBinaryOp[T, T, T]
+    def second: GrBBinaryOp[T, T, T]
+    def any: GrBBinaryOp[T, T, T]
+    def pair: GrBBinaryOp[T, T, T]
+    def min: GrBBinaryOp[T, T, T]
+    def max: GrBBinaryOp[T, T, T]
+    def plus: GrBBinaryOp[T, T, T]
+    def minus: GrBBinaryOp[T, T, T]
+    def rminus: GrBBinaryOp[T, T, T]
+    def times: GrBBinaryOp[T, T, T]
+    def div: GrBBinaryOp[T, T, T]
+    def rdiv: GrBBinaryOp[T, T, T]
+    def iseq: GrBBinaryOp[T, T, T]
+    def isne: GrBBinaryOp[T, T, T]
+    def isgt: GrBBinaryOp[T, T, T]
+    def islt: GrBBinaryOp[T, T, T]
+    def isge: GrBBinaryOp[T, T, T]
+    def isle: GrBBinaryOp[T, T, T]
+    def lor: GrBBinaryOp[T, T, T]
+    def land: GrBBinaryOp[T, T, T]
+    def lxor: GrBBinaryOp[T, T, T]
+
+}
+
 
 
 object GrBBinaryOp {
 
-  val boolean = new BuiltInBinaryOps[Boolean] {
+  // eq
+  implicit def eqBoolean:EqOp[Boolean] = EqOp(GRAPHBLAS.eqBinaryOpBoolean())
+  implicit def eqByte:EqOp[Byte] = EqOp(GRAPHBLAS.eqBinaryOpByte())
+  implicit def eqShort:EqOp[Short] = EqOp(GRAPHBLAS.eqBinaryOpShort())
+  implicit def eqInt:EqOp[Int] = EqOp(GRAPHBLAS.eqBinaryOpInt())
+  implicit def eqLong:EqOp[Long] = EqOp(GRAPHBLAS.eqBinaryOpLong())
+  implicit def eqFloat:EqOp[Float] = EqOp(GRAPHBLAS.eqBinaryOpFloat())
+  implicit def eqDouble:EqOp[Double] = EqOp(GRAPHBLAS.eqBinaryOpDouble())
+
+  def apply[A, B, C](pointer: Buffer): GrBBinaryOp[A, B, C] =
+    GrBDefaultBinaryOp(pointer)
+
+  implicit val boolean = new BuiltInBinaryOps[Boolean] {
     val first: GrBBinaryOp[Boolean, Boolean, Boolean] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpBoolean())
     val second: GrBBinaryOp[Boolean, Boolean, Boolean] =
@@ -88,7 +129,7 @@ object GrBBinaryOp {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpBoolean())
   }
 
-  val double = new BuiltInBinaryOps[Double] {
+  implicit val double = new BuiltInBinaryOps[Double] {
     val first: GrBBinaryOp[Double, Double, Double] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpDouble())
     val second: GrBBinaryOp[Double, Double, Double] =
@@ -145,7 +186,7 @@ object GrBBinaryOp {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpDouble())
   }
 
-  val short = new BuiltInBinaryOps[Short] {
+  implicit val short = new BuiltInBinaryOps[Short] {
     val first: GrBBinaryOp[Short, Short, Short] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpShort())
     val second: GrBBinaryOp[Short, Short, Short] =
@@ -202,7 +243,7 @@ object GrBBinaryOp {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpShort())
   }
 
-  val long = new BuiltInBinaryOps[Long] {
+  implicit val long = new BuiltInBinaryOps[Long] {
     val first: GrBBinaryOp[Long, Long, Long] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpLong())
     val second: GrBBinaryOp[Long, Long, Long] =
@@ -259,7 +300,7 @@ object GrBBinaryOp {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpLong())
   }
 
-  val float = new BuiltInBinaryOps[Float] {
+  implicit val float = new BuiltInBinaryOps[Float] {
     val first: GrBBinaryOp[Float, Float, Float] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpFloat())
     val second: GrBBinaryOp[Float, Float, Float] =
@@ -316,7 +357,7 @@ object GrBBinaryOp {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpFloat())
   }
 
-  val int = new BuiltInBinaryOps[Int] {
+  implicit val int = new BuiltInBinaryOps[Int] {
     val first: GrBBinaryOp[Int, Int, Int] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpInt())
     val second: GrBBinaryOp[Int, Int, Int] =
@@ -373,7 +414,7 @@ object GrBBinaryOp {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpInt())
   }
 
-  val byte = new BuiltInBinaryOps[Byte] {
+  implicit val byte = new BuiltInBinaryOps[Byte] {
     val any: GrBBinaryOp[Byte, Byte, Byte] =
       GrBBinaryOp(GRAPHBLAS.anyBinaryOpByte())
     val first: GrBBinaryOp[Byte, Byte, Byte] =

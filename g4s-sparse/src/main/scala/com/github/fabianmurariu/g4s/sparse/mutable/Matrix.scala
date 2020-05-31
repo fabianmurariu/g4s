@@ -1,47 +1,24 @@
 package com.github.fabianmurariu.g4s.sparse.mutable
 
-import java.lang.AutoCloseable
-import java.nio.Buffer
-import scala.{specialized => sp}
-import simulacrum.typeclass
-import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
 import com.github.fabianmurariu.g4s.sparse.grb.ElemWise
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
+import com.github.fabianmurariu.g4s.sparse.grb.MxM
+import simulacrum.typeclass
+import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
+import com.github.fabianmurariu.g4s.sparse.grb.EqOp
+import com.github.fabianmurariu.g4s.sparse.grb.MatrixHandler
+import scala.{specialized => sp}
+import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
 
-/**
-  * The Uber type class for anything matrix related, anything tha implements this
-  * type class should be somewhat usable as a matrix, there are caveats and dependencies
-  * to [[MatrixHandler]]
-  */
-@typeclass trait Matrix[F[_]] {
-  def nvals[A](f: F[A]): Long
-  def nrows[A](f: F[A]): Long
-  def ncols[A](f: F[A]): Long
-  def clear[A](f: F[A]): Unit
-  def duplicate[A](f: F[A]): F[A]
-  def resize[A](f: F[A])(rows: Long, cols: Long): Unit
-
-  def release[A](f: F[A]): Unit
-
-  def get[A](
-      f: F[A]
-  )(i: Long, j: Long)(implicit MH: MatrixHandler[F, A]): Option[A] = {
-    MH.get(f)(i, j)
-  }
-
-  def set[@sp(Boolean, Byte, Short, Int, Long, Float, Double) A](
-      f: F[A]
-  )(i: Long, j: Long, a: A)(implicit MH: MatrixHandler[F, A]): Unit = {
-    MH.set(f)(i, j, a)
-  }
+trait Matrix[M[_]] extends MatrixLike[M] with ElemWise[M] with MxM[M] { self =>
 
   /**
     * Returns true if op(fa, fb) is true for each pair of items (elem wise)
-    * FIXME: Not sure if this belongs here or we need an extension to Matrix to use GrB stuff
     */
-  def isAny[A](fa1: F[A])(fa2: F[A], op: GrBBinaryOp[A, A, Boolean])
-           (implicit EW: ElemWise[F], R: Reduce[F, Boolean]): Boolean = {
+  def isAny[A](fa1: M[A])(fa2: M[A], op: GrBBinaryOp[A, A, Boolean])(
+      implicit R: Reduce[M, Boolean]
+  ): Boolean = {
     if (nrows(fa1) != nrows(fa2))
       false
     else if (ncols(fa1) != ncols(fa2))
@@ -52,7 +29,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
       if (nvals1 != nvals2)
         false
       else {
-        val fa3 = EW.intersection(Left(op))(fa1, fa2)
+        val fa3 = self.intersection(Left(op))(fa1, fa2)
         if (nvals1 != nvals(fa3)) {
           val out = false
           release(fa3)
@@ -68,25 +45,54 @@ import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
     }
   }
 
+  def isEq[A](
+      fa1: M[A]
+  )(fa2: M[A])(implicit R: Reduce[M, Boolean], EQ: EqOp[A]): Boolean = {
+    isAny(fa1)(fa2, EQ)
+  }
+
+  def make[A](rows:Long, cols:Long)(implicit MB:MatrixBuilder[A]): M[A]
 }
 
-trait MatrixHandler[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A] {
-  @inline
-  def set(p: F[A])(i: Long, j: Long, x: A): Unit
-  @inline
-  def get(f: F[A])(i: Long, j: Long): Option[A]
-}
+object Matrix {
+  trait Ops[M[_], A] extends Any {
 
-object MatrixHandler {
-  def apply[F[_], A](
-      getFn: (F[A], Long, Long) => Option[A]
-  )(setFn: (F[A], Long, Long, A) => Unit): MatrixHandler[F, A] =
-    new MatrixHandler[F, A] {
+    def self: M[A]
+    def M: Matrix[M]
 
-      override def set(f: F[A])(i: Long, j: Long, x: A): Unit =
-        setFn(f, i, j, x)
-
-      override def get(f: F[A])(i: Long, j: Long): Option[A] = getFn(f, i, j)
-
+    def isAny(fa2: M[A], op: GrBBinaryOp[A, A, Boolean])(
+        implicit R: Reduce[M, Boolean]
+    ): Boolean = {
+      M.isAny(self)(fa2, op)
     }
+
+    def isEq(
+        fa2: M[A]
+    )(implicit R: Reduce[M, Boolean], EQ: EqOp[A]): Boolean = {
+      M.isEq(self)(fa2)
+    }
+
+    def get(i: Long, j: Long)(implicit MH: MatrixHandler[M, A]): Option[A] = {
+      M.get(self)(i, j)
+    }
+
+    def set(i: Long, j: Long, a: A)(implicit MH: MatrixHandler[M, A]): Unit = {
+      M.set(self)(i, j, a)
+    }
+
+    def nvals: Long = M.nvals(self)
+    def nrows: Long = M.nrows(self)
+    def ncols: Long = M.ncols(self)
+
+    def clear: Unit = M.clear(self)
+
+    def duplicate: M[A] = M.duplicate(self)
+
+    def resize(rows: Long, cols: Long): Unit = M.resize(self)(rows, cols)
+
+    def release: Unit = M.release(self)
+
+  }
+
+  def apply[M[_]](implicit M:Matrix[M]): Matrix[M] = M
 }

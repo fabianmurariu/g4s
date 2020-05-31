@@ -1,6 +1,7 @@
 package com.github.fabianmurariu.g4s.sparse.grb
 
 import com.github.fabianmurariu.unsafe.GRBCORE
+import java.util.concurrent.atomic.AtomicLong
 
 package object grb {
 
@@ -15,6 +16,5 @@ package object grb {
 
     GRBCORE.initNonBlocking()
   }
-
 
 }
