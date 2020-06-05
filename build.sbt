@@ -3,7 +3,7 @@ ThisBuild / organization := "com.github.fabianmurariu"
 
 val scalaTest = "org.scalatest" %% "scalatest" % "3.1.2"
 val scalaTestScalaCheck = "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2"
-val grbVersion = "0.1.6"
+val grbVersion = "0.1.8"
 
 lazy val commonSettings = Seq(
     scalacOptions += "-Ypartial-unification",
@@ -50,9 +50,7 @@ lazy val g4sGraph = (project in file("g4s-graph"))
       scalaTest % Test,
       scalaTestScalaCheck % Test,
       "org.typelevel" %% "cats-free" % "2.1.1",
-      "io.monix" %% "monix-reactive" % "3.2.1",
-      "org.rocksdb" % "rocksdbjni" % "6.8.1",
-      "org.apache.tinkerpop" % "gremlin-core" % "3.4.6"
+      "io.monix" %% "monix-reactive" % "3.2.1"
 
     )
   )

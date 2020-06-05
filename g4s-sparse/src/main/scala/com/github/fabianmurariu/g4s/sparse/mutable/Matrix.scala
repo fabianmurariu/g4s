@@ -10,6 +10,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 import com.github.fabianmurariu.g4s.sparse.grb.MatrixHandler
 import scala.{specialized => sp}
 import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
+import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 
 trait Matrix[M[_]] extends MatrixLike[M] with ElemWise[M] with MxM[M] { self =>
 
@@ -35,7 +36,7 @@ trait Matrix[M[_]] extends MatrixLike[M] with ElemWise[M] with MxM[M] { self =>
           release(fa3)
           out
         } else {
-          val m = GrBMonoid[Boolean](GrBBinaryOp.boolean.land, false)
+          val m = GrBMonoid[Boolean](BuiltInBinaryOps.boolean.land, false)
           val out = R.reduceAll(fa3)(false, m, None, None)
           release(fa3)
           m.close()

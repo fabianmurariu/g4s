@@ -11,3 +11,6 @@ trait MxM[F[_]] extends MatrixLike[F] {
   )(fa:F[A], f:F[B]): F[C]
 }
 
+object MxM {
+  def apply[M[_]](implicit M:MxM[M]):MxM[M] = M
+}

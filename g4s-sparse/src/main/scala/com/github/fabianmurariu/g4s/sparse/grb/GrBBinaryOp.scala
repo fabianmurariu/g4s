@@ -71,6 +71,9 @@ object GrBBinaryOp {
 
   def apply[A, B, C](pointer: Buffer): GrBBinaryOp[A, B, C] =
     GrBDefaultBinaryOp(pointer)
+}
+
+object BuiltInBinaryOps {
 
   implicit val boolean = new BuiltInBinaryOps[Boolean] {
     val first: GrBBinaryOp[Boolean, Boolean, Boolean] =
