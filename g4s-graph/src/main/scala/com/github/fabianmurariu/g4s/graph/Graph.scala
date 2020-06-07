@@ -3,7 +3,6 @@ package com.github.fabianmurariu.g4s.graph
 import cats.free.Free
 import cats.arrow.FunctionK
 import cats.{Id, ~>}
-import monix.reactive.Observable
 
 /**
   *
@@ -13,5 +12,5 @@ import monix.reactive.Observable
   * functions should in general return [[GraphTraverser[F]]]
   */
 trait Graph[G[_, _]] {
-
+// TODO: see GraphDB
 }

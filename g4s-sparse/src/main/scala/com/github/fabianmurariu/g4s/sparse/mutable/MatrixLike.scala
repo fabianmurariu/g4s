@@ -13,13 +13,15 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
   EqOp,
   MatrixHandler
 }
+import zio._
+import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
 
 @typeclass trait MatrixLike[M[_]] {
   def nvals[A](f: M[A]): Long
   def nrows[A](f: M[A]): Long
   def ncols[A](f: M[A]): Long
   def clear[A](f: M[A]): Unit
-  def duplicate[A](f: M[A]): M[A]
+  def duplicate[A](f: M[A]): Managed[Throwable, M[A]]
   def resize[A](f: M[A])(rows: Long, cols: Long): Unit
 
   def release[A](f: M[A]): Unit
@@ -34,5 +36,9 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
          (implicit MH: MatrixHandler[M, A]): Unit = {
     MH.set(f)(i, j, a)
   }
+
+  def make[A:MatrixBuilder](rows:Long, cols:Long):Managed[Throwable, M[A]]
+  // for the special case when you want to manage your own resources see GraphDB
+  def makeUnsafe[A:MatrixBuilder](rows:Long, cols:Long): Task[M[A]]
 
 }

@@ -20,10 +20,15 @@ import GrBBinaryOp._
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.MonoidBuilder
 
+import zio._
+
+//TODO: move to zio-tests
 class GrBMatrixSpec
     extends AnyFlatSpec
     with ScalaCheckDrivenPropertyChecks
     with Matchers {
+  val runtime = Runtime.default
+
   behavior of "GrBMatrix"
 
   // addBasicMatrixTest[Boolean]
@@ -46,49 +51,60 @@ class GrBMatrixSpec
 
     it should s"create a matrix of ${CT.toString()} set values into it, get values from it then release it" in forAll {
       mt: MatrixTuples[A] =>
-        val mat = GrBMatrix[A](mt.dim.rows, mt.dim.cols)
+        val m = GrBMatrix[A](mt.dim.rows, mt.dim.cols)
 
-        mt.vals.foreach {
-          case (i, j, v) =>
-            mat.set(i, j, v)
-        }
+        runtime.unsafeRun(m.use { mat =>
+          IO.effect {
+            mt.vals.foreach {
+              case (i, j, v) =>
+                mat.set(i, j, v)
+            }
 
-        mt.vals.foreach {
-          case (i, j, v) =>
-            mat.get(i, j) shouldBe Some(v)
-        }
-
-        mat.close() // releases the matrix
+            mt.vals.foreach {
+              case (i, j, v) =>
+                mat.get(i, j) shouldBe Some(v)
+            }
+          }
+        })
     }
 
     it should s"create 2 matrices of ${CT.toString()} set n,m to a and -a and verify equality" in forAll {
       (mt: MatrixTuples[A], a1: A, a2: A) =>
-        val mata = GrBMatrix[A](mt.dim.rows, mt.dim.cols)
-        val matb = GrBMatrix[A](mt.dim.rows, mt.dim.cols)
+        val mats = for {
+          mata <- GrBMatrix[A](mt.dim.rows, mt.dim.cols)
+          matb <- GrBMatrix[A](mt.dim.rows, mt.dim.cols)
+        } yield (mata, matb)
 
-        mt.vals.foreach {
-          case (i, j, v) =>
-            mata.set(i, j, v)
-            matb.set(i, j, v)
-        }
+        val io = mats.use {
+          case (mata, matb) =>
+            for {
+              _ <- IO.effect {
 
-        val rows = mata.nrows
-        val cols = matb.ncols
+              mt.vals.foreach {
+                case (i, j, v) =>
+                  mata.set(i, j, v)
+                  matb.set(i, j, v)
+              }
 
-        // set the last and first value to a1 mata and a2 in matb
-        mata.set(0, 0, a1)
-        mata.set(rows - 1, cols - 1, a1)
-        matb.set(0, 0, a2)
-        matb.set(rows - 1, cols - 1, a2)
+              val rows = mata.nrows
+              val cols = matb.ncols
 
-        if (a1 == a2) {
-          mata.isEq(matb) shouldBe true
-        } else {
-          mata.isEq(matb) shouldBe false
-        }
-
-      mata.close()
-      matb.close()
+              // set the last and first value to a1 mata and a2 in matb
+              mata.set(0, 0, a1)
+              mata.set(rows - 1, cols - 1, a1)
+              matb.set(0, 0, a2)
+              matb.set(rows - 1, cols - 1, a2)
+              }
+              isEq <- mata.isEq(matb)
+            } yield {
+            if (a1 == a2) {
+                isEq shouldBe true
+              } else {
+                isEq shouldBe false
+              }
+            }
+          }
+        runtime.unsafeRun(io)
     }
 
     it should s"multiply 2 matrices of ${CT.toString()} on the plusTimes semiring" in forAll {
@@ -98,23 +114,24 @@ class GrBMatrixSpec
           MatrixTuples(MatrixDimensions(rows2, cols2), vals2)
         ) = m
 
-      val mat1 = GrBMatrix[A](rows1, cols1)
-      val mat2 = GrBMatrix[A](rows2, cols2)
+        val mats = for {
+          mat1 <- GrBMatrix[A](rows1, cols1)
+          mat2 <- GrBMatrix[A](rows2, cols2)
+          plus <- GrBMonoid(OP.plus, N.zero)
+          semi <- GrBSemiring(plus, OP.times)
+          c <- Matrix[GrBMatrix].mxmNew(semi, None, None, None)(mat1, mat2)
+        } yield c
 
-      // the usual semiring plus times
+        // the usual semiring plus times
 
-      val plus = GrBMonoid(OP.plus, N.zero)
-      val plusTimesSemiring = GrBSemiring(plus, OP.times)
+        val io = mats.use { c =>
+          IO.effect {
+            c.nrows shouldBe rows1
+            c.ncols shouldBe cols2
+            c.nvals //
+          }
+        }
 
-      val c = Matrix[GrBMatrix].mxm(plusTimesSemiring, None, None, None)(mat1, mat2)
-
-      c.nrows shouldBe rows1
-      c.ncols shouldBe cols2
-      c.nvals
-
-      plusTimesSemiring.close()
-      plus.close()
-      c.close()
     }
   }
 
