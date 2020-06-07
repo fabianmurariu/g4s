@@ -9,6 +9,8 @@ lazy val commonSettings = Seq(
     scalacOptions += "-Ypartial-unification",
     libraryDependencies ++= Seq(
       "org.typelevel" %% "cats-effect" % "2.1.3",
+      "dev.zio" %% "zio" % "1.0.0-RC20",
+      "dev.zio" %% "zio-interop-cats" % "2.1.3.0-RC15",
       scalaTest % Test,
       scalaTestScalaCheck % Test,
       "com.github.mpilquist" %% "simulacrum" % "0.19.0"),
@@ -50,24 +52,8 @@ lazy val g4sGraph = (project in file("g4s-graph"))
       scalaTest % Test,
       scalaTestScalaCheck % Test,
       "org.typelevel" %% "cats-free" % "2.1.1",
-      "io.monix" %% "monix-reactive" % "3.2.1"
-
+      "co.fs2" %% "fs2-core" % "2.2.1"
     )
   )
 
-// lazy val g4sGremlin = (project in file("g4s-gremlin"))
-//   .aggregate(g4sSparse)
-//   .dependsOn(g4sSparse)
-//   .settings(
-//     commonSettings,
-
-//     name := "g4s-gremlin",
-
-//     libraryDependencies ++= Seq(
-//       scalaTest % Test,
-//       scalaTestScalaCheck % Test,
-//       "org.typelevel" %% "cats-effect" % "2.1.3"
-//     )
-//   )
-// g4sSparse / Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.ScalaLibrary
 g4sSparse / Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat

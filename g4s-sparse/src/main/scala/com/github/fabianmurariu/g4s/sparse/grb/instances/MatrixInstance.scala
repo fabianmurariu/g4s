@@ -6,8 +6,10 @@ import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
 
 class MatrixInstance extends Matrix[GrBMatrix] with MatrixLikeInstance with ElemWiseInstance with MxMInstance {
 
-  override def make[A](rows: Long, cols: Long)(implicit MB: MatrixBuilder[A]): GrBMatrix[A] =
+  override def make[A](rows: Long, cols: Long)(implicit MB: MatrixBuilder[A]) =
     GrBMatrix(rows, cols)
 
+  override def makeUnsafe[A](rows: Long, cols: Long)(implicit MB: MatrixBuilder[A]) =
+    GrBMatrix.unsafe[A](rows, cols)
 
 }

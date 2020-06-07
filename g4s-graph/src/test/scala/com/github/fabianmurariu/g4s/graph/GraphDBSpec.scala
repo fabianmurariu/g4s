@@ -3,12 +3,10 @@ package com.github.fabianmurariu.g4s.graph
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
-import cats.effect.IO
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMatrix
-import monix.eval.Task
-import monix.execution.Scheduler.Implicits.global
-import monix.reactive.Observable
 import cats.free.Free
+import zio._
+import zio.interop.catz._
 
 class GraphDBSpec
     extends AnyFlatSpec
@@ -28,17 +26,15 @@ class GraphDBSpec
     _ <- createEdge(jennifer, "works_for", msft)
   } yield ()
 
+  def evalQuery[A](gQuery: Free[GraphStep, A]): A = {
+    val gResource = GraphDB.default
 
-  def evalQuery[A](gQuery: Free[GraphStep, A]) = {
+    val io = gResource.use { g =>
+        val a = gQuery.foldMap(GraphStep.interpreter[GrBMatrix](g))
+        a.compile.toVector
+    }.map(_.head)
 
-    val gResource = GraphDB.default[Task]
-
-    gResource.use { g =>
-
-      val a = gQuery.foldMap(GraphStep.interpreter[GrBMatrix](g))
-
-      a.headL
-    }
+    Runtime.default.unsafeRun(io)
   }
 
   "GraphDB" should "get all the vertices back with labels" in {
@@ -47,7 +43,7 @@ class GraphDBSpec
         _ <- create
         res <- query(vs)
       } yield res
-    ).runSyncUnsafe()
+    )
 
     actual shouldBe VerticesRes(
       Vector(
@@ -60,14 +56,13 @@ class GraphDBSpec
     )
   }
 
-
   it should "get all edges back with types" in {
-      val gQuery = for {
-        _ <- create
-        res <- query(vs.out())
-      } yield res
+    val gQuery = for {
+      _ <- create
+      res <- query(vs.out())
+    } yield res
 
-    val actual = evalQuery(gQuery).runSyncUnsafe()
+    val actual = evalQuery(gQuery)
 
     actual shouldBe EdgesRes(
       Vector(
@@ -80,12 +75,12 @@ class GraphDBSpec
   }
 
   it should "expand 1 hop to one edge" in {
-      val gQuery = for {
-        _ <- create
-        res <- query(vs.out("likes"))
-      } yield res
+    val gQuery = for {
+      _ <- create
+      res <- query(vs.out("likes"))
+    } yield res
 
-    val actual = evalQuery(gQuery).runSyncUnsafe()
+    val actual = evalQuery(gQuery)
 
     actual shouldBe EdgesRes(
       Vector(
@@ -96,12 +91,12 @@ class GraphDBSpec
   }
 
   it should "expand 1 hop to the next labeled vertex" in {
-      val gQuery = for {
-        _ <- create
-        res <- query(vs.out("likes").v("Mexican"))
-      } yield res
+    val gQuery = for {
+      _ <- create
+      res <- query(vs.out("likes").v("Mexican"))
+    } yield res
 
-    val actual = evalQuery(gQuery).runSyncUnsafe()
+    val actual = evalQuery(gQuery)
 
     actual shouldBe VerticesRes(
       Vector(
@@ -112,12 +107,14 @@ class GraphDBSpec
   }
 
   it should "expand 1 hope to multiple edge types" in {
-      val gQuery = for {
-        _ <- create
-        res <- query(vs.out("is_friend", "works_for").v()) // is_friend OR works_for
-      } yield res
+    val gQuery = for {
+      _ <- create
+      res <- query(
+        vs.out("is_friend", "works_for").v()
+      ) // is_friend OR works_for
+    } yield res
 
-    val actual = evalQuery(gQuery).runSyncUnsafe()
+    val actual = evalQuery(gQuery)
 
     actual shouldBe VerticesRes(
       Vector(
@@ -128,12 +125,12 @@ class GraphDBSpec
   }
 
   it should "expand 1 hop out to all Vertices" in {
-      val gQuery = for {
-        _ <- create
-        res <- query(vs.out("likes").v())
-      } yield res
+    val gQuery = for {
+      _ <- create
+      res <- query(vs.out("likes").v())
+    } yield res
 
-    val actual = evalQuery(gQuery).runSyncUnsafe()
+    val actual = evalQuery(gQuery)
 
     actual shouldBe VerticesRes(
       Vector(

@@ -5,34 +5,28 @@ import cats.arrow.FunctionK
 import cats.{Id, ~>}
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMatrix
 import scala.collection.mutable
-import monix.execution.atomic.AtomicLong
-import monix.reactive.Observable
 import com.github.fabianmurariu.g4s.sparse.mutable.MatrixLike
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 import com.github.fabianmurariu.g4s.sparse.grb.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.ElemWise
-import cats.effect.Resource
-import cats.effect.Sync
 import com.github.fabianmurariu.g4s.sparse.mutable.Matrix
-import monix.eval.Task
 import com.github.fabianmurariu.g4s.sparse.grb.MatrixHandler
 import scala.collection.generic.CanBuildFrom
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
+import zio._
+import fs2.Stream
 
 /**
   * Naive first pass implementation of a Graph database
   * over sparse matrices that may be of type GraphBLAS
   * FIXME:
-  *  this is dangerously unsafe and mutable
-  *  there is no guarantee about intermediate matrices and when they are
-  *  supposed to be released
+  *  this is mutable but all functions return effects
   *  multiple threads are not supported here
- *   Resource should be able to encode the ownership from rust
   * */
-sealed class GraphDB[M[_]](
+final class GraphDB[M[_]](
     private[graph] val nodes: M[Boolean],
     private[graph] val edgesOut: M[Boolean],
     private[graph] val edgesIn: M[Boolean],
@@ -48,16 +42,9 @@ sealed class GraphDB[M[_]](
     MH: MatrixHandler[M, Boolean],
     MB: MatrixBuilder[Boolean],
     OPS: BuiltInBinaryOps[Boolean]
-) extends AutoCloseable { self =>
+) { self =>
 
-  def close(): Unit = {
-    M.release(nodes)
-    M.release(edgesOut)
-    M.release(edgesIn)
-    relTypes.valuesIterator.foreach(M.release)
-  }
-
-  def insertVertex(labels: Vector[String]): Long = {
+  def insertVertex(labels: Vector[String]): Task[Long] = IO.effect {
     val vxId = count;
     M.set(nodes)(vxId, vxId, true)
 
@@ -72,48 +59,80 @@ sealed class GraphDB[M[_]](
     vxId
   }
 
-  def insertEdge(src: Long, tpe: String, dest: Long): (Long, Long) = {
-    M.set(edgesOut)(src, dest, true)
-    M.set(edgesIn)(dest, src, true)
+  def insertEdge(
+      src: Long,
+      tpe: String,
+      dest: Long
+  ): Task[(Long, Long)] =
+    for {
+      _ <- IO.effect {
+        M.set(edgesOut)(src, dest, true)
+        M.set(edgesIn)(dest, src, true)
+      }
 
-    val tpeMat = relTypes.getOrElseUpdate(tpe, M.make[Boolean](16, 16))
-    M.set(tpeMat)(src, dest, true)
+      tpeMat <- {
+        relTypes.get(tpe) match {
+          case None => {
+            M.makeUnsafe[Boolean](16, 16).map { m =>
+              relTypes.put(tpe, m)
+              m
+            }
+          }
+          case Some(m) => IO.effect(m)
+        }
+      }
+      pair <- IO.effect {
 
-    val edgeTypeData =
-      self.edgeData.getOrElseUpdate((src, dest), mutable.Set(tpe))
-    edgeTypeData += tpe
-    (src, dest)
+        M.set(tpeMat)(src, dest, true)
 
-  }
+        val edgeTypeData =
+          self.edgeData.getOrElseUpdate((src, dest), mutable.Set(tpe))
+        edgeTypeData += tpe
+        (src, dest)
+
+      }
+    } yield pair
 
   /**
     * TODO:
     * assumed relation is we want the matrix including all the labels
     * but we could create a boolean expression saying we want :a labels and not :b labels etc..
     */
-  def vectorMatrixForLabels(labels: Set[String]): M[Boolean] = {
-    val m = M.make(16, 16)
-    labels.foldLeft(m) { (mat, label) =>
-      labelIndex.get(label).foreach { nodes =>
-        nodes.foldLeft(m) { (mat, vid) =>
-          MH.set(m)(vid, vid, true)
-          m
+  def vectorMatrixForLabels(labels: Set[String]): TaskManaged[M[Boolean]] = {
+    val mRes = M.make(16, 16)
+    mRes.map { m =>
+      labels.foldLeft(m) { (mat, label) =>
+        labelIndex.get(label).foreach { nodes =>
+          nodes.foldLeft(m) { (mat, vid) =>
+            MH.set(m)(vid, vid, true)
+            m
+          }
         }
+        m
       }
-      m
     }
-    m
   }
 
   /**
     * TODO:
     * see vectorMatrixForLabels
     */
-  def edgeMatrixForTypes(types: Set[String], out: Boolean): M[Boolean] = {
-    val out = M.make(16, 16)
-    types
-      .flatMap(tpe => relTypes.get(tpe))
-      .foldLeft(out)(Matrix[M].unionInto(Left(OPS.land)))
+  def edgeMatrixForTypes(
+      types: Set[String],
+      out: Boolean
+  ): TaskManaged[M[Boolean]] = {
+    val outRes = M.make(16, 16)
+
+    outRes.mapM { out =>
+      types
+        .flatMap(tpe => relTypes.get(tpe))
+        .foldLeft(IO.effect(out)) { (intoIO, mat) =>
+          for {
+            into <- intoIO
+            union <- Matrix[M].union(into)(Left(OPS.land))(into, mat)
+          } yield union
+        }
+    }
   }
 
   /**
@@ -154,23 +173,26 @@ sealed class GraphDB[M[_]](
 }
 
 object GraphDB {
-  import cats.implicits._
-  def default[F[_]: Sync]: Resource[F, GraphDB[GrBMatrix]] = {
-    Resource.fromAutoCloseable(
-      Sync[F].delay(
+
+  def default: TaskManaged[GraphDB[GrBMatrix]] =
+    for {
+      nodes <- GrBMatrix[Boolean](16, 16)
+      edgesIn <- GrBMatrix[Boolean](16, 16)
+      edgesOut <- GrBMatrix[Boolean](16, 16)
+      graph <- Managed.makeEffect(
         new GraphDB[GrBMatrix](
-          GrBMatrix[Boolean](16, 16),
-          GrBMatrix[Boolean](16, 16),
-          GrBMatrix[Boolean](16, 16),
+          nodes,
+          edgesIn,
+          edgesOut,
           mutable.Map.empty,
           mutable.Map.empty,
           mutable.Map.empty,
           mutable.Map.empty,
           0L
         )
-      )
-    )
-  }
+      ) { gdb => gdb.relTypes.valuesIterator.foreach(_.close()) }
+    } yield graph
+
 }
 
 sealed trait GraphStep[+T]
@@ -254,132 +276,83 @@ case class EdgesRes(es: Vector[(Long, String, Long)]) extends QueryResult
 object GraphStep {
 
   type Step[T] = Free[GraphStep, T]
+  type Observable[T] = Stream[Task, T]
 
   def interpreter[M[_]: Matrix](g: GraphDB[M]) = new (GraphStep ~> Observable) {
     def apply[A](fa: GraphStep[A]): Observable[A] = fa match {
       case CreateNode(labels) =>
-        Observable.fromTask(
-          Task.delay(g.insertVertex(labels))
+        Stream.eval(
+          g.insertVertex(labels)
+          // TODO: way too small of an operation, should use chunks
         )
 
       case CreateEdge(src, tpe, dest) =>
-        Observable.fromTask(
-          Task.delay(g.insertEdge(src, tpe, dest))
+        Stream.eval(
+          g.insertEdge(src, tpe, dest)
         )
 
+      // TODO: we need to know what type is the last step of the path in order to render
+      // we should probably use some form of associated types or a Render typeclass
       case QueryStep(q: EdgeQuery) =>
-        Observable.fromTask(
-          Task.delay(
-            matAsEdges(foldQueryPath(g, q))(g)
-          )
-        )
+        Stream.eval(matAsEdges(foldQueryPath(g, q))(g))
 
       case QueryStep(q: VertexQuery) =>
-        Observable.fromTask(
-          Task.delay(
-            matAsVertices(foldQueryPath(g, q))(g)
-          )
-        )
+        Stream.eval(matAsVertices(foldQueryPath(g, q))(g))
 
       case QueryStep(q @ AndThen(_, _: EdgeQuery)) =>
-        Observable.fromTask(
-          Task.delay(
-            matAsEdges(foldQueryPath(g, q))(g)
-          )
-        )
+        Stream.eval(matAsEdges(foldQueryPath(g, q))(g))
 
       case QueryStep(q @ AndThen(_, _: VertexQuery)) =>
-        Observable.fromTask(
-          Task.delay(
-            matAsVertices(foldQueryPath(g, q))(g)
-          )
-        )
+        Stream.eval(matAsVertices(foldQueryPath(g, q))(g))
     }
 
   }
 
-  /**
-   * Used to determine when we can release an intermediary
-   * matrix or if we have a matrix that is not ours to release
-   *
-   */
-  sealed trait FoldSignal[M[_]] { self =>
-    def m:M[Boolean]
-    def isCore = self.isInstanceOf[Core[M]]
-    def isIntermediate = !isCore
-  }
-  case class Core[M[_]](m:M[Boolean]) extends FoldSignal[M]
-  case class Intermediate[M[_]](m: M[Boolean]) extends FoldSignal[M]
+  def lift[G[_], A](g: G[A]): TaskManaged[G[A]] =
+    Managed.fromEffect(IO.effect(g))
 
   def foldQueryPath[M[_]: Matrix](g: GraphDB[M], q: Query)(
       implicit OPS: BuiltInBinaryOps[Boolean]
-  ): FoldSignal[M] = {
-    var add: GrBMonoid[Boolean] = null
-    var semiring: GrBSemiring[Boolean, Boolean, Boolean] = null
-    try {
-      add = GrBMonoid(OPS.any, true)
-      semiring = GrBSemiring(add, OPS.pair)
+  ): TaskManaged[M[Boolean]] = {
 
-      // FIXME: in order for this to correctly fold it needs to
-      // be a stack based interpreter otherwise we don't know
-      // when to copy the left most mat then use that with mxm
-      // here we leak intermediary matrices
-      def loop(q: Query): FoldSignal[M] = {
-        q match {
-          case AllVertices => Core(g.nodes)
-          case AllEdgesOut => Core(g.edgesOut)
-          case AllEdgesIn  => Core(g.edgesIn)
-          case Vertex(labels) =>
-            Intermediate(g.vectorMatrixForLabels(labels))
-          case Edges(types, Out) =>
-            Intermediate(g.edgeMatrixForTypes(types, true))
-          case Edges(types, In) =>
-            Intermediate(g.edgeMatrixForTypes(types, false))
-          case AndThen(cur, next) =>
-            val left = foldQueryPath(g, cur)
-            val right = foldQueryPath(g, next)
-
-            try {
-              Intermediate(MxM[M].mxm(semiring)(left.m, right.m))
-            } finally {
-              if (left.isIntermediate) {
-                Matrix[M].release(left.m)
-              }
-              if (right.isIntermediate) {
-                Matrix[M].release(right.m)
-              }
-            }
-        }
+    def loop(
+        semiring: GrBSemiring[Boolean, Boolean, Boolean],
+        q: Query
+    ): TaskManaged[M[Boolean]] =
+      q match {
+        case AllVertices => lift(g.nodes)
+        case AllEdgesOut => lift(g.edgesOut)
+        case AllEdgesIn  => lift(g.edgesIn)
+        case Vertex(labels) =>
+          g.vectorMatrixForLabels(labels)
+        case Edges(types, Out) =>
+          g.edgeMatrixForTypes(types, true)
+        case Edges(types, In) =>
+          g.edgeMatrixForTypes(types, false)
+        case AndThen(cur, next) =>
+          for {
+            left <- loop(semiring, cur)
+            right <- loop(semiring, next)
+            out <- MxM[M].mxmNew(semiring)(left, right)
+          } yield out
       }
-      loop(q)
-    } finally {
-      add.close()
-      semiring.close()
-    }
+
+    for {
+      add <- GrBMonoid[Boolean](OPS.any, true)
+      semiring <- GrBSemiring[Boolean, Boolean, Boolean](add, OPS.pair)
+      out <- loop(semiring, q)
+    } yield out
   }
 
-  // TODO: Matrix is too big for these operations, there should be a Closeable like typeclass
-  def matAsVertices[M[_]:Matrix](mat: FoldSignal[M])(g: GraphDB[M]): VerticesRes = {
-    val m = mat.m
-    try {
-      VerticesRes(g.labeledVertices(m))
-    } finally {
-      if (mat.isIntermediate) {
-        Matrix[M].release(m)
-      }
-    }
-  }
+  def matAsVertices[M[_]](
+      mat: TaskManaged[M[Boolean]]
+  )(g: GraphDB[M]): Task[VerticesRes] =
+    mat.use { m => IO.effect(VerticesRes(g.labeledVertices(m))) }
 
-  def matAsEdges[M[_]:Matrix](mat: FoldSignal[M])(g: GraphDB[M]): EdgesRes = {
-    val m = mat.m
-    try {
-      EdgesRes(g.renderEdges(m))
-    } finally {
-      if (mat.isIntermediate) {
-        Matrix[M].release(m)
-      }
-    }
-  }
+  def matAsEdges[M[_]](
+      mat: TaskManaged[M[Boolean]]
+  )(g: GraphDB[M]): Task[EdgesRes] =
+    mat.use { m => IO.effect(EdgesRes(g.renderEdges(m))) }
 
   def createNode(label: String, labels: String*) = {
     Free.liftF(CreateNode((label +: labels).toVector))

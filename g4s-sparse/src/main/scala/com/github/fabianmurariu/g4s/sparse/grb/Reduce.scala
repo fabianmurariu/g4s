@@ -1,23 +1,24 @@
 package com.github.fabianmurariu.g4s.sparse.grb
 
+import zio._
 import com.github.fabianmurariu.unsafe.GRBALG
 import scala.{specialized => sp}
 
-trait Reduce[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A] {
+trait Reduce[M[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A] {
   @inline
-  def reduceAll(f: F[A])(
+  def reduceAll(f: M[A])(
       init: A,
       monoid: GrBMonoid[A],
       accum: Option[GrBBinaryOp[A, A, A]] = None,
       desc: Option[GrBDescriptor] = None
-  ): A
+  ): Task[A]
 
   @inline
-  def reduceM(f:F[A])(
+  def reduceNumeric(f:M[A])(
       monoid: GrBMonoid[A],
       accum: Option[GrBBinaryOp[A, A, A]] = None,
       desc: Option[GrBDescriptor] = None
-  )(implicit N:Numeric[A]) : A = {
+  )(implicit N:Numeric[A]) : Task[A] = {
     reduceAll(f)(N.zero, monoid, accum, desc)
   }
 }
@@ -31,7 +32,7 @@ object Reduce {
           monoid: GrBMonoid[Boolean],
           accum: Option[GrBBinaryOp[Boolean, Boolean, Boolean]],
           desc: Option[GrBDescriptor]
-      ): Boolean = {
+      ): Task[Boolean] = IO.effect {
         GRBALG.matrixReduceAllBoolean(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
       }
     }
@@ -44,7 +45,7 @@ object Reduce {
           monoid: GrBMonoid[Byte],
           accum: Option[GrBBinaryOp[Byte, Byte, Byte]],
           desc: Option[GrBDescriptor]
-      ): Byte = {
+      ): Task[Byte] = IO.effect{
         GRBALG.matrixReduceAllByte(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
       }
     }
@@ -57,7 +58,7 @@ object Reduce {
           monoid: GrBMonoid[Short],
           accum: Option[GrBBinaryOp[Short, Short, Short]],
           desc: Option[GrBDescriptor]
-      ): Short = {
+      ): Task[Short] = IO.effect{
         GRBALG.matrixReduceAllShort(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
       }
     }
@@ -70,7 +71,7 @@ object Reduce {
           monoid: GrBMonoid[Int],
           accum: Option[GrBBinaryOp[Int, Int, Int]],
           desc: Option[GrBDescriptor]
-      ): Int = {
+      ): Task[Int] = IO.effect{
         GRBALG.matrixReduceAllInt(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
       }
     }
@@ -83,7 +84,7 @@ object Reduce {
           monoid: GrBMonoid[Long],
           accum: Option[GrBBinaryOp[Long, Long, Long]],
           desc: Option[GrBDescriptor]
-      ): Long = {
+      ): Task[Long] = IO.effect{
         GRBALG.matrixReduceAllLong(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
       }
     }
@@ -96,7 +97,7 @@ object Reduce {
           monoid: GrBMonoid[Float],
           accum: Option[GrBBinaryOp[Float, Float, Float]],
           desc: Option[GrBDescriptor]
-      ): Float = {
+      ): Task[Float] = Task.effect{
         GRBALG.matrixReduceAllFloat(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
       }
     }
@@ -109,7 +110,7 @@ object Reduce {
           monoid: GrBMonoid[Double],
           accum: Option[GrBBinaryOp[Double, Double, Double]],
           desc: Option[GrBDescriptor]
-      ): Double = {
+      ): Task[Double] = IO.effect{
         GRBALG.matrixReduceAllDouble(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
       }
     }

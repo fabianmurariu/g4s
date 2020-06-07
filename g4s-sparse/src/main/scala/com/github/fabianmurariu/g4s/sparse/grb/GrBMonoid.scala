@@ -1,11 +1,11 @@
 package com.github.fabianmurariu.g4s.sparse.grb
-
+import zio._
 import java.nio.Buffer
 import com.github.fabianmurariu.unsafe.GRAPHBLAS
 import com.github.fabianmurariu.unsafe.GRBMONOID
 import com.github.fabianmurariu.unsafe.GRBCORE
 
-case class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T) extends AutoCloseable {
+final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T) extends AutoCloseable {
 
   override def close(): Unit = {
     GRBCORE.freeMonoid(pointer)
@@ -15,8 +15,13 @@ case class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T) extends AutoC
 }
 
 object GrBMonoid {
-  def apply[T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T): GrBMonoid[T] =
-    GrBMonoid(MonoidBuilder[T].createMonoid(op.pointer, zero), zero)
+  def apply[T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T) =
+    Managed.fromAutoCloseable(
+      IO.effect{
+        grb.GRB
+        new GrBMonoid(MonoidBuilder[T].createMonoid(op.pointer, zero), zero)
+}
+    )
 }
 
 trait MonoidBuilder[T] {
