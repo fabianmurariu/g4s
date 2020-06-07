@@ -90,8 +90,6 @@ object Matrix {
 
     def resize(rows: Long, cols: Long): Unit = M.resize(self)(rows, cols)
 
-    def release: Unit = M.release(self)
-
   }
 
   def apply[M[_]](implicit M: Matrix[M]): Matrix[M] = M

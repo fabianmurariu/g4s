@@ -34,7 +34,4 @@ trait MatrixLikeInstance extends MatrixLike[GrBMatrix] {
     GRBCORE.resizeMatrix(f.pointer, rows, cols)
   }
 
-  override def release[A](f: GrBMatrix[A]): Unit = {
-    f.close()
-  }
 }

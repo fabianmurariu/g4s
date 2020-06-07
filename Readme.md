@@ -23,7 +23,7 @@ val gq = for {
     res <- query(vs.out("likes").v("Games"))
 } yield res
 
-val actual = evalQuery(gq).runSyncUnsafe()
+val actual = evalQuery(gq)
 
 actual shouldBe VerticesRes(
     Vector(
@@ -52,12 +52,12 @@ val gq = for {
     res <- query(vs.out("is_friend", "works_for").v()) // is_friend OR works_for
 } yield res
 
-val actual = evalQuery(gq).runSyncUnsafe()
+val actual = evalQuery(gq)
 
 actual shouldBe VerticesRes(
     Vector(
-    0L -> Set("Michael", "Person"),
-    2L -> Set("Microsoft")
+      0L -> Set("Michael", "Person"),
+      2L -> Set("Microsoft")
     )
 )
 
@@ -72,10 +72,7 @@ actual shouldBe VerticesRes(
   def nrows[A](f: M[A]): Long
   def ncols[A](f: M[A]): Long
   def clear[A](f: M[A]): Unit
-  def duplicate[A](f: M[A]): M[A]
   def resize[A](f: M[A])(rows: Long, cols: Long): Unit
-
-  def release[A](f: M[A]): Unit
 
   def get[A](f: M[A])(i: Long, j: Long)
          (implicit MH: MatrixHandler[M, A]): Option[A] = {
@@ -88,13 +85,18 @@ actual shouldBe VerticesRes(
     MH.set(f)(i, j, a)
   }
 
+  def duplicate[A](f: M[A]): Managed[Throwable, M[A]]
+  def make[A:MatrixBuilder](rows:Long, cols:Long):Managed[Throwable, M[A]]
+  // for the special case when you want to manage your own resources see GraphDB
+  def makeUnsafe[A:MatrixBuilder](rows:Long, cols:Long): Task[M[A]]
+
 }
 
 ```
 
 The list of things to-do is daunting but here are some 
 
-* [ ] Correct resource management, lift matrices into `cats.effect.Resource`
+* [x] Correct resource management, lift matrices into `cats.effect.Resource` or `zio.ZManaged`
 * [ ] The project depends on [graphblas-java-native](https://github.com/fabianmurariu/graphblas-java-native) which is not published in maven central
 * [ ] Make the interpreter return chunks and stream the results via `Observable` or `fs2.Stream`
 * [ ] Add functionality to load nodes and edges from CSV files

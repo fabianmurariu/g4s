@@ -21,10 +21,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
   def nrows[A](f: M[A]): Long
   def ncols[A](f: M[A]): Long
   def clear[A](f: M[A]): Unit
-  def duplicate[A](f: M[A]): Managed[Throwable, M[A]]
   def resize[A](f: M[A])(rows: Long, cols: Long): Unit
-
-  def release[A](f: M[A]): Unit
 
   def get[A](f: M[A])(i: Long, j: Long)
          (implicit MH: MatrixHandler[M, A]): Option[A] = {
@@ -37,6 +34,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
     MH.set(f)(i, j, a)
   }
 
+  def duplicate[A](f: M[A]): Managed[Throwable, M[A]]
   def make[A:MatrixBuilder](rows:Long, cols:Long):Managed[Throwable, M[A]]
   // for the special case when you want to manage your own resources see GraphDB
   def makeUnsafe[A:MatrixBuilder](rows:Long, cols:Long): Task[M[A]]
