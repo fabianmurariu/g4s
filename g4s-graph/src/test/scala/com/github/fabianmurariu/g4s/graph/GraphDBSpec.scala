@@ -7,6 +7,8 @@ import com.github.fabianmurariu.g4s.sparse.grb.GrBMatrix
 import cats.free.Free
 import zio._
 import zio.interop.catz._
+import com.github.fabianmurariu.g4s.graph.graph.DefaultVertex
+import com.github.fabianmurariu.g4s.graph.graph.DefaultEdge
 
 class GraphDBSpec
     extends AnyFlatSpec
@@ -30,7 +32,7 @@ class GraphDBSpec
     val gResource = GraphDB.default
 
     val io = gResource.use { g =>
-        val a = gQuery.foldMap(GraphStep.interpreter[GrBMatrix](g))
+      val a = gQuery.foldMap(GraphStep.interpreter[GrBMatrix, DefaultVertex, DefaultEdge](g))
         a.compile.toVector
     }.map(_.head)
 
@@ -139,5 +141,22 @@ class GraphDBSpec
       )
     )
 
+  }
+
+  it should "create nodes,edges in bulk, filter on label" in {
+
+    val gQuery = for {
+      _ <- createNodes(Vector("one", "two"), Vector("more","labels"), Vector("more", "two"))
+      _ <- createEdges((2, "friend", 0), (1, "friend", 0))
+      res <- query(vs("two").out("friend").v("one"))
+    } yield res
+
+    val actual = evalQuery(gQuery)
+
+    actual shouldBe VerticesRes(
+      Vector(
+        0L -> Set("one", "two")
+      )
+    )
   }
 }

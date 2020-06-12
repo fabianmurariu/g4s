@@ -18,6 +18,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
 import zio._
 import fs2.Stream
+import simulacrum.typeclass
 
 /**
   * Naive first pass implementation of a Graph database
@@ -26,7 +27,7 @@ import fs2.Stream
   *  this is mutable but all functions return effects
   *  multiple threads are not supported here
   * */
-final class GraphDB[M[_]](
+final class GraphDB[M[_], V: graph.Vertex, E: graph.Edge](
     private[graph] val nodes: M[Boolean],
     private[graph] val edgesOut: M[Boolean],
     private[graph] val edgesIn: M[Boolean],
@@ -34,9 +35,9 @@ final class GraphDB[M[_]](
     private[graph] val labelIndex: mutable.Map[String, mutable.Set[
       Long
     ]], // node labels and node ids
-    nodeData: mutable.Map[Long, mutable.Set[String]],
-    edgeData: mutable.Map[(Long, Long), mutable.Set[String]],
-    var count: Long
+    private[graph] val nodeData: mutable.Map[Long, mutable.Set[String]],
+    private[graph] val edgeData: mutable.Map[(Long, Long), mutable.Set[String]],
+    private[graph] var count: Long
 )(
     implicit M: Matrix[M],
     MH: MatrixHandler[M, Boolean],
@@ -44,54 +45,21 @@ final class GraphDB[M[_]](
     OPS: BuiltInBinaryOps[Boolean]
 ) { self =>
 
-  def insertVertex(labels: Vector[String]): Task[Long] = IO.effect {
-    val vxId = count;
-    M.set(nodes)(vxId, vxId, true)
-
-    labels.foreach { label =>
-      val set = labelIndex.getOrElseUpdate(label, mutable.Set(vxId))
-      set += vxId
-    }
-
-    nodeData.getOrElseUpdate(vxId, mutable.Set(labels: _*))
-
-    count += 1
-    vxId
+  def insertVerticesChunk(
+      vs: fs2.Chunk[Vector[String]]
+  ): Task[fs2.Chunk[Long]] = IO.effect {
+    vs.map(GraphDB.insertVertex0(this, _))
   }
 
   def insertEdge(
-      src: Long,
-      tpe: String,
-      dest: Long
-  ): Task[(Long, Long)] =
-    for {
-      _ <- IO.effect {
-        M.set(edgesOut)(src, dest, true)
-        M.set(edgesIn)(dest, src, true)
-      }
+      e: (Long, String, Long)
+  ): Task[(Long, Long)] = {
+    GraphDB.insertEdge0(this, e)
+  }
 
-      tpeMat <- {
-        relTypes.get(tpe) match {
-          case None => {
-            M.makeUnsafe[Boolean](16, 16).map { m =>
-              relTypes.put(tpe, m)
-              m
-            }
-          }
-          case Some(m) => IO.effect(m)
-        }
-      }
-      pair <- IO.effect {
-
-        M.set(tpeMat)(src, dest, true)
-
-        val edgeTypeData =
-          self.edgeData.getOrElseUpdate((src, dest), mutable.Set(tpe))
-        edgeTypeData += tpe
-        (src, dest)
-
-      }
-    } yield pair
+  def insertVertex(labels: Vector[String]): Task[Long] = IO.effect {
+    GraphDB.insertVertex0(this, labels)
+  }
 
   /**
     * TODO:
@@ -174,13 +142,14 @@ final class GraphDB[M[_]](
 
 object GraphDB {
 
-  def default: TaskManaged[GraphDB[GrBMatrix]] =
+  def default[V: graph.Vertex, E: graph.Edge]
+      : TaskManaged[GraphDB[GrBMatrix, V, E]] =
     for {
       nodes <- GrBMatrix[Boolean](16, 16)
       edgesIn <- GrBMatrix[Boolean](16, 16)
       edgesOut <- GrBMatrix[Boolean](16, 16)
       graph <- Managed.makeEffect(
-        new GraphDB[GrBMatrix](
+        new GraphDB[GrBMatrix, V, E](
           nodes,
           edgesIn,
           edgesOut,
@@ -193,178 +162,56 @@ object GraphDB {
       ) { gdb => gdb.relTypes.valuesIterator.foreach(_.close()) }
     } yield graph
 
-}
+  private def insertVertex0[M[_]: Matrix, V, E](
+      g: GraphDB[M, V, E],
+      labels: Vector[String]
+  )(implicit M: MatrixHandler[M, Boolean]): Long = {
+    val vxId = g.count;
+    M.set(g.nodes)(vxId, vxId, true)
 
-sealed trait GraphStep[+T]
-
-case class CreateNode(labels: Vector[String]) extends GraphStep[Long]
-case class CreateEdge(src: Long, tpe: String, dest: Long)
-    extends GraphStep[(Long, Long)]
-case class QueryStep(q: Query) extends GraphStep[QueryResult]
-
-sealed trait Direction
-case object Undirected extends Direction
-case object Out extends Direction
-case object In extends Direction
-
-sealed trait Query { self =>
-
-  /**
-    * (a) -[edgeTypes..]-> (b)
-    */
-  def out(edgeTypes: String*) = {
-    if (edgeTypes.isEmpty) {
-      AndThen(self, AllEdgesOut)
-    } else {
-      AndThen(self, Edges(edgeTypes.toSet, Out))
-    }
-  }
-
-  /**
-    * (a) <-[edgeTypes..]- (b)
-    */
-  def in(edgeTypes: String*) = {
-    if (edgeTypes.isEmpty) {
-      AndThen(self, AllEdgesIn)
-    } else {
-      AndThen(self, Edges(edgeTypes.toSet, In))
-    }
-  }
-
-  /**
-    * .. (b: vertexLabel)
-    */
-  def v(vertexLabels: String*) = {
-    if (vertexLabels.isEmpty) {
-      AndThen(self, AllVertices)
-    } else {
-      AndThen(self, Vertex(vertexLabels.toSet))
-    }
-  }
-
-  /**
-    * shorthand for .out().v(vertexLabel)
-    * (a) -> (b:vertexLabel ..)
-    */
-  def outV(vertexLabel: String, vertexLabels: String*) =
-    AndThen(out(), Vertex((vertexLabel +: vertexLabels).toSet))
-
-  /**
-    * shorthand for .in().v(vertexLabel)
-    * (a) <- (b:vertexLabel ..)
-    */
-  def inV(vertexLabel: String, vertexLabels: String*) =
-    AndThen(in(), Vertex((vertexLabel +: vertexLabels).toSet))
-}
-
-sealed trait EdgeQuery extends Query
-sealed trait VertexQuery extends Query
-
-case object AllVertices extends VertexQuery
-case object AllEdges extends EdgeQuery
-case object AllEdgesOut extends EdgeQuery
-case object AllEdgesIn extends EdgeQuery
-
-case class Edges(types: Set[String], direction: Direction) extends EdgeQuery
-case class Vertex(labels: Set[String]) extends VertexQuery
-case class AndThen(cur: Query, next: Query) extends Query
-
-sealed trait QueryResult
-case class VerticesRes(vs: Vector[(Long, Set[String])]) extends QueryResult
-case class EdgesRes(es: Vector[(Long, String, Long)]) extends QueryResult
-
-object GraphStep {
-
-  type Step[T] = Free[GraphStep, T]
-  type Observable[T] = Stream[Task, T]
-
-  def interpreter[M[_]: Matrix](g: GraphDB[M]) = new (GraphStep ~> Observable) {
-    def apply[A](fa: GraphStep[A]): Observable[A] = fa match {
-      case CreateNode(labels) =>
-        Stream.eval(
-          g.insertVertex(labels)
-          // TODO: way too small of an operation, should use chunks
-        )
-
-      case CreateEdge(src, tpe, dest) =>
-        Stream.eval(
-          g.insertEdge(src, tpe, dest)
-        )
-
-      // TODO: we need to know what type is the last step of the path in order to render
-      // we should probably use some form of associated types or a Render typeclass
-      case QueryStep(q: EdgeQuery) =>
-        Stream.eval(matAsEdges(foldQueryPath(g, q))(g))
-
-      case QueryStep(q: VertexQuery) =>
-        Stream.eval(matAsVertices(foldQueryPath(g, q))(g))
-
-      case QueryStep(q @ AndThen(_, _: EdgeQuery)) =>
-        Stream.eval(matAsEdges(foldQueryPath(g, q))(g))
-
-      case QueryStep(q @ AndThen(_, _: VertexQuery)) =>
-        Stream.eval(matAsVertices(foldQueryPath(g, q))(g))
+    labels.foreach { label =>
+      val set = g.labelIndex.getOrElseUpdate(label, mutable.Set(vxId))
+      set += vxId
     }
 
+    val nodeLabels = g.nodeData.getOrElseUpdate(vxId, mutable.Set())
+    labels.foldLeft(nodeLabels) { _ += _ }
+
+    g.count += 1
+    vxId
   }
 
-  def lift[G[_], A](g: G[A]): TaskManaged[G[A]] =
-    Managed.fromEffect(IO.effect(g))
-
-  def foldQueryPath[M[_]: Matrix](g: GraphDB[M], q: Query)(
-      implicit OPS: BuiltInBinaryOps[Boolean]
-  ): TaskManaged[M[Boolean]] = {
-
-    def loop(
-        semiring: GrBSemiring[Boolean, Boolean, Boolean],
-        q: Query
-    ): TaskManaged[M[Boolean]] =
-      q match {
-        case AllVertices => lift(g.nodes)
-        case AllEdgesOut => lift(g.edgesOut)
-        case AllEdgesIn  => lift(g.edgesIn)
-        case Vertex(labels) =>
-          g.vectorMatrixForLabels(labels)
-        case Edges(types, Out) =>
-          g.edgeMatrixForTypes(types, true)
-        case Edges(types, In) =>
-          g.edgeMatrixForTypes(types, false)
-        case AndThen(cur, next) =>
-          for {
-            left <- loop(semiring, cur)
-            right <- loop(semiring, next)
-            out <- MxM[M].mxmNew(semiring)(left, right)
-          } yield out
+  private def insertEdge0[M[_]: Matrix, V, E](g:GraphDB[M, V, E],
+                                              e:(Long, String, Long))
+                         (implicit MH:MatrixHandler[M, Boolean]): Task[(Long, Long)] = {
+    val (src, tpe, dest) = e
+    for {
+      _ <- IO.effect {
+        MH.set(g.edgesOut)(src, dest, true)
+        MH.set(g.edgesIn)(dest, src, true)
       }
 
-    for {
-      add <- GrBMonoid[Boolean](OPS.any, true)
-      semiring <- GrBSemiring[Boolean, Boolean, Boolean](add, OPS.pair)
-      out <- loop(semiring, q)
-    } yield out
+      tpeMat <- {
+        g.relTypes.get(tpe) match {
+          case None => {
+            Matrix[M].makeUnsafe[Boolean](16, 16).map { m =>
+              g.relTypes.put(tpe, m)
+              m
+            }
+          }
+          case Some(m) => IO.effect(m)
+        }
+      }
+      pair <- IO.effect {
+
+        MH.set(tpeMat)(src, dest, true)
+
+        val edgeTypeData =
+          g.edgeData.getOrElseUpdate((src, dest), mutable.Set(tpe))
+        edgeTypeData += tpe
+        (src, dest)
+
+      }
+    } yield pair
   }
-
-  def matAsVertices[M[_]](
-      mat: TaskManaged[M[Boolean]]
-  )(g: GraphDB[M]): Task[VerticesRes] =
-    mat.use { m => IO.effect(VerticesRes(g.labeledVertices(m))) }
-
-  def matAsEdges[M[_]](
-      mat: TaskManaged[M[Boolean]]
-  )(g: GraphDB[M]): Task[EdgesRes] =
-    mat.use { m => IO.effect(EdgesRes(g.renderEdges(m))) }
-
-  def createNode(label: String, labels: String*) = {
-    Free.liftF(CreateNode((label +: labels).toVector))
-  }
-
-  def createEdge(src: Long, tpe: String, dest: Long) = {
-    Free.liftF(CreateEdge(src, tpe, dest))
-  }
-
-  def query(q: Query) =
-    Free.liftF(QueryStep(q))
-
-  def vs = AllVertices
-
 }
