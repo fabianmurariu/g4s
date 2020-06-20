@@ -83,7 +83,9 @@ final class GraphDB[M[_], V: graph.Vertex, E: graph.Edge](
 
   /**
     * TODO:
-    * see vectorMatrixForLabels
+    *  see vectorMatrixForLabels
+    *  in the specific case where we only need a single type this is no longer
+    *  a separate matrix but the one owned by the graph
     */
   def edgeMatrixForTypes(
       types: Set[String],

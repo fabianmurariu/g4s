@@ -21,6 +21,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.MonoidBuilder
 
 import zio._
+import com.github.fabianmurariu.g4s.sparse.grb.MxM
 
 //TODO: move to zio-tests
 class GrBMatrixSpec
@@ -135,4 +136,46 @@ class GrBMatrixSpec
     }
   }
 
+  "Efficient Query for RDF graph example" should "contain the correct matrices for the graph" in {
+    val mats = for {
+      a <- GrBMatrix[Boolean](5, 5)
+      b <- GrBMatrix[Boolean](5, 5)
+      c <- GrBMatrix[Boolean](5, 5)
+      d <- GrBMatrix[Boolean](5, 5)
+      id <- GrBMatrix[Boolean](5, 5)
+      add <- GrBMonoid[Boolean](BuiltInBinaryOps.boolean.any, true)
+      semiring <- GrBSemiring[Boolean, Boolean, Boolean](add, BuiltInBinaryOps.boolean.pair)
+    } yield {
+      b.set(0, 1, true)
+      b.set(1, 3, true)
+      b.set(1, 4, true)
+
+      for (i <- 0 to 4){
+        id.set(i, i, true)
+      }
+    (a, b, c, d, id, semiring)
+    }
+
+
+    val mh = implicitly[MatrixHandler[GrBMatrix, Boolean]]
+
+    // query x-(:B)->y-(:B)->z, x -(:A)-> z
+    val io = mats.use{case (a, b, c, d, id, semiring) =>
+
+      val r = for {
+        mxy <- MxM[GrBMatrix].mxmNew(semiring)(id, b)
+        myz <- MxM[GrBMatrix].mxmNew(semiring)(mxy, b)
+      } yield (mxy, myz)
+
+      r.use{ case (mxy, myz) =>
+        IO.effect{
+          println(s"Mxy = ${mh.show(mxy)}")
+          println(s"Myz = ${mh.show(myz)}")
+        }
+
+      }
+    }
+
+    runtime.unsafeRun(io)
+  }
 }

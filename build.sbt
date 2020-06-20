@@ -3,7 +3,7 @@ ThisBuild / organization := "com.github.fabianmurariu"
 
 val scalaTest = "org.scalatest" %% "scalatest" % "3.1.2"
 val scalaTestScalaCheck = "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2"
-val grbVersion = "0.1.8"
+val grbVersion = "0.1.9"
 
 lazy val commonSettings = Seq(
     scalacOptions += "-Ypartial-unification",

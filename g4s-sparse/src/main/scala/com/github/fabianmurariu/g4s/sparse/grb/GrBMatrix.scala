@@ -10,6 +10,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.instances.MatrixLikeInstance
 import com.github.fabianmurariu.g4s.sparse.grb.instances.ElemWiseInstance
 import com.github.fabianmurariu.g4s.sparse.grb.instances.MxMInstance
 import com.github.fabianmurariu.g4s.sparse.grb.instances.MatrixInstance
+import simulacrum.typeclass
 
 final class GrBMatrix[T](private[grb] val pointer: Buffer)
     extends AutoCloseable {
@@ -51,3 +52,4 @@ object GrBMatrix {
   }
 
 }
+

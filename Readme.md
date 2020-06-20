@@ -98,6 +98,7 @@ The list of things to-do is daunting but here are some
 
 * [x] Correct resource management, lift matrices into `cats.effect.Resource` or `zio.ZManaged`
 * [ ] The project depends on [graphblas-java-native](https://github.com/fabianmurariu/graphblas-java-native) which is not published in maven central
+* [ ] Make `graphblas-java-native` throw exceptions on GrB failures
 * [ ] Make the interpreter return chunks and stream the results via `Observable` or `fs2.Stream`
 * [ ] Add functionality to load nodes and edges from CSV files
 * [ ] Make each function and class type complete with respect to resource management, failure, effects and mutability
