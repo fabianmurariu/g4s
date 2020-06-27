@@ -40,7 +40,7 @@ class GraphDBSpec
     val io = gResource
       .use { g =>
         val a = gQuery.foldMap(
-          GraphStep.interpreter[GrBMatrix, GrBVector, DefaultVertex, DefaultEdge](g)
+          GraphStep.interpreter[GrBMatrix, GrBVector](g)
         )
         a.compile.toVector
       }
@@ -204,12 +204,4 @@ class GraphDBSpec
     ) // aren't paths just vectors of edges?
   }
 
-  it should "yet another DSL for query graphs" in {
-    import QueryGraph._
-    import QueryGraph.ops._
-
-     for {
-      a <- nodes("a").out(Set("aaaa!"))
-    } yield a
-  }
 }

@@ -20,6 +20,7 @@ package com.github.fabianmurariu.g4s.graph
  *
  *
  */
+@Deprecated
 sealed trait Query { self =>
 
   /**

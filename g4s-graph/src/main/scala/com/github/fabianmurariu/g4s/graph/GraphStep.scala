@@ -32,8 +32,8 @@ object GraphStep {
   type Step[T] = Free[GraphStep, T]
   type Observable[T] = fs2.Stream[Task, T]
 
-  def interpreter[M[_]: Matrix, SV[_]: SparseVector, V, E](
-      g: GraphDB[M, V, E]
+  def interpreter[M[_]: Matrix, SV[_]: SparseVector](
+      g: GraphDB[M]
   )(implicit MH: MatrixHandler[M, Int], VH: VectorHandler[SV, Int]) =
     new (GraphStep ~> Observable) {
       def apply[A](fa: GraphStep[A]): Observable[A] = fa match {
@@ -88,7 +88,7 @@ object GraphStep {
     * https://gist.github.com/fabianmurariu/fafd14bf96bbb13754a9ded33f59e4ff
     * FIXME we sort of ignore query and just walk the graph from all starting vertices
     */
-  def foldQueryWithPaths[M[_], SV[_], V, E](g: GraphDB[M, V, E], q: Query)(
+  def foldQueryWithPaths[M[_], SV[_], V, E](g: GraphDB[M], q: Query)(
       implicit OPS: BuiltInBinaryOps[Boolean],
       M: Matrix[M],
       SV: SparseVector[SV],
@@ -143,7 +143,7 @@ object GraphStep {
     ???
   }
 
-  def foldQueryPath[M[_]: Matrix, V, E](g: GraphDB[M, V, E], q: Query)(
+  def foldQueryPath[M[_]: Matrix, V, E](g: GraphDB[M], q: Query)(
       implicit OPS: BuiltInBinaryOps[Boolean]
   ): TaskManaged[M[Boolean]] = {
 
@@ -176,19 +176,19 @@ object GraphStep {
     } yield out
   }
 
-  def matAsVertices[M[_], V, E](
+  def matAsVertices[M[_]](
       mat: TaskManaged[M[Boolean]]
-  )(g: GraphDB[M, V, E]): Task[VerticesRes] =
+  )(g: GraphDB[M]): Task[VerticesRes] =
     mat.use { m => IO.effect(VerticesRes(g.labeledVertices(m))) }
 
   //TODO: figure this out later
   def matAsPaths[M[_], V, E](
       mat: TaskManaged[M[Boolean]]
-  )(g: GraphDB[M, V, E]): Task[PathRes] = IO.effect(PathRes(Vector(Path(0))))
+  )(g: GraphDB[M]): Task[PathRes] = IO.effect(PathRes(Vector(Path(0))))
 
   def matAsEdges[M[_], V, E](
       mat: TaskManaged[M[Boolean]]
-  )(g: GraphDB[M, V, E]): Task[EdgesRes] =
+  )(g: GraphDB[M]): Task[EdgesRes] =
     mat.use { m => IO.effect(EdgesRes(g.renderEdges(m))) }
 
   def createNode(label: String, labels: String*) = {

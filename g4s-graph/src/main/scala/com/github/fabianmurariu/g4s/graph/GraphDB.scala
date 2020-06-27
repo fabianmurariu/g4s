@@ -27,7 +27,7 @@ import simulacrum.typeclass
   *  this is mutable but all functions return effects
   *  multiple threads are not supported here
   * */
-final class GraphDB[M[_], V: graph.Vertex, E: graph.Edge](
+final class GraphDB[M[_]](
     private[graph] val nodes: M[Boolean],
     private[graph] val edgesOut: M[Boolean],
     private[graph] val edgesIn: M[Boolean],
@@ -144,14 +144,13 @@ final class GraphDB[M[_], V: graph.Vertex, E: graph.Edge](
 
 object GraphDB {
 
-  def default[V: graph.Vertex, E: graph.Edge]
-      : TaskManaged[GraphDB[GrBMatrix, V, E]] =
+  def default : TaskManaged[GraphDB[GrBMatrix]] =
     for {
       nodes <- GrBMatrix[Boolean](16, 16)
       edgesIn <- GrBMatrix[Boolean](16, 16)
       edgesOut <- GrBMatrix[Boolean](16, 16)
       graph <- Managed.makeEffect(
-        new GraphDB[GrBMatrix, V, E](
+        new GraphDB[GrBMatrix](
           nodes,
           edgesIn,
           edgesOut,
@@ -164,8 +163,8 @@ object GraphDB {
       ) { gdb => gdb.relTypes.valuesIterator.foreach(_.close()) }
     } yield graph
 
-  private def insertVertex0[M[_]: Matrix, V, E](
-      g: GraphDB[M, V, E],
+  private def insertVertex0[M[_]: Matrix](
+      g: GraphDB[M],
       labels: Vector[String]
   )(implicit M: MatrixHandler[M, Boolean]): Long = {
     val vxId = g.count;
@@ -183,7 +182,7 @@ object GraphDB {
     vxId
   }
 
-  private def insertEdge0[M[_]: Matrix, V, E](g:GraphDB[M, V, E],
+  private def insertEdge0[M[_]: Matrix, V, E](g:GraphDB[M],
                                               e:(Long, String, Long))
                          (implicit MH:MatrixHandler[M, Boolean]): Task[(Long, Long)] = {
     val (src, tpe, dest) = e
