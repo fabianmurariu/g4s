@@ -14,7 +14,7 @@ import cats.Traverse
   */
 trait UndirectedGraph[F[_], G] { self =>
 
-  def neighbours(fg: F[G])(vs:Int): F[Traversable[Int]]
+  def neighbours(fg: F[G])(vs: Int): F[Traversable[Int]]
 
   /**
     * Inserts a node
@@ -89,12 +89,12 @@ trait UndirectedGraph[F[_], G] { self =>
       case (parent :: tail, history) =>
         self
           .neighbours(fg)(parent)
-          .map { 
-              _.foldLeft(tail, history) {
-                case ((t, h), c) if !history.contains(c) => // node not seen
-                  (c :: t, h + (c -> Some(parent)))
-                case (orElse, _) => orElse // when node is already in instory
-              }
+          .map {
+            _.foldLeft(tail, history) {
+              case ((t, h), c) if !history.contains(c) => // node not seen
+                (c :: t, h + (c -> Some(parent)))
+              case (orElse, _) => orElse // when node is already in instory
+            }
           }
     } { case (stack, _) => stack.isEmpty }
 
@@ -178,4 +178,22 @@ object UndirectedGraph {
     }
 
   def apply[F[_], G](implicit G: UndirectedGraph[F, G]) = G
+
+  trait Ops[F[_], G] extends Any {
+    def self: F[G]
+
+    def insertNode(id: Int)(implicit G: UndirectedGraph[F, G]): F[G] =
+      G.insertNode(self)(id)
+
+    def insertEdge(src: Int, dst: Int)(
+        implicit G: UndirectedGraph[F, G]
+    ): F[G] =
+      G.insertEdge(self)(src, dst)
+  }
+
+  object ops {
+    implicit class OpsImpl[F[_], G](val self: F[G])
+        extends AnyVal
+        with Ops[F, G]
+  }
 }
