@@ -1,25 +1,84 @@
 package com.github.fabianmurariu.g4s.graph.core
 
 import simulacrum.typeclass
+import cats.kernel.Hash
+import cats.kernel.Eq
+import cats.implicits._
+import scala.annotation.tailrec
+import cats.Monad
+import cats.Functor
 
 /**
-  * Graph
+  * Undirected Graph allowing self pointing edges (x) -> (x)
   */
-@typeclass trait Graph[G[_, _]] {
-  def orderG[V, E](g: G[V, E]): Int
+trait Graph[G[_, _], F[_]] { self =>
 
-  def sizeG[V, E](g: G[V, E]): Int
+  def neighbours[V, E](fg: F[G[V, E]])(v: V): F[Traversable[(V, E)]]
 
-  def density[V, E](g: G[V, E]): Double = {
-    val n = orderG(g)
-    val e = sizeG(g)
-    (2 * (e - n + 1)) / (n * (n - 3) + 2)
+  def vertices[V, E](g: F[G[V, E]]): F[Traversable[V]]
+
+  def edgesTriples[V, E](g: F[G[V, E]]): F[Traversable[(V, E, V)]]
+
+  def containsV[V, E](g: F[G[V, E]])(v: V): F[Boolean]
+
+  def getEdge[V, E](g: F[G[V, E]])(v1: V, v2: V): F[Option[E]]
+
+  def insertVertex[V, E](g: F[G[V, E]])(v: V): F[G[V, E]]
+
+  def insertEdge[V, E](g: F[G[V, E]])(src: V, dst: V, e: E): F[G[V, E]]
+
+  def removeVertex[V, E](g: F[G[V, E]])(v: V): F[G[V, E]]
+
+  def removeEdge[V, E](g: F[G[V, E]])(src: V, dst: V): F[G[V, E]]
+
+  def orderG[V, E](g: F[G[V, E]]): F[Int]
+
+  def sizeG[V, E](g: F[G[V, E]]): F[Int]
+
+  def degree[V, E](g: F[G[V, E]])(v: V): F[Int]
+
+  /* ************************************************** */
+
+  def adjacentEdges[V, E](g: F[G[V, E]])(
+      v: V
+  )(implicit F: Functor[F]): F[Traversable[E]] =
+    self.neighbours(g)(v).map(_.map(_._2))
+
+  def density[V, E](g: F[G[V, E]])(implicit F: Monad[F]): F[Double] =
+    for {
+      n <- self.orderG(g)
+      e <- self.sizeG(g)
+    } yield (2 * (e - n + 1)) / (n * (n - 3) + 2)
+
+  def dfs[V, E](
+      g: F[G[V, E]]
+  )(v: V)(implicit F: Monad[F]): F[Map[V, Option[V]]] = {
+
+    val dfsLoop = F.iterateUntilM(List(v), Map(v -> Option.empty[V])) {
+      case (Nil, history) =>
+        F.pure((Nil, history)) // to ward off the warning but won't hit
+      case (parent :: tail, history) =>
+        self
+          .neighbours(g)(parent)
+          .map {
+            _.foldLeft(tail -> history) {
+              case ((t, h), (c, _)) if !history.contains(c) => // node not seen
+                (c :: t, h + (c -> Some(parent)))
+              case (orElse, _) => orElse // when node is already in instory
+            }
+          }
+    } { case (stack, _) => stack.isEmpty }
+
+    dfsLoop.map(_._2)
   }
 
-  def vertices[V, E](g: G[V, E]): Traversable[V]
-
+  def empty[V, E]: F[G[V, E]]
 }
 
-trait GraphK[F[_]] {
-  def orderG[G[_, _]:Graph, V, E](f: F[G[V, E]]): F[Int]
+object Graph {
+
+  implicit def adjacencyMapIsAGraph[F[_]: Monad] =
+    new ImmutableAdjacencyMapGraphInstance[F]
+
+  def apply[G[_, _], F[_]](implicit G: Graph[G, F]): Graph[G, F] = G
 }

@@ -11,9 +11,10 @@ lazy val commonSettings = Seq(
       "org.typelevel" %% "cats-effect" % "2.1.3",
       "dev.zio" %% "zio" % "1.0.0-RC20",
       "dev.zio" %% "zio-interop-cats" % "2.1.3.0-RC15",
+      "com.github.mpilquist" %% "simulacrum" % "0.19.0",
+      "org.typelevel" %% "discipline-scalatest" % "1.0.1" % Test,
       scalaTest % Test,
-      scalaTestScalaCheck % Test,
-      "com.github.mpilquist" %% "simulacrum" % "0.19.0"),
+      scalaTestScalaCheck % Test),
 
     addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.1" cross CrossVersion.full),
     resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"

@@ -4,14 +4,11 @@ import cats.free.Free
 import cats.free.Free.liftF
 import cats.{~>, Id}
 import cats.data.State
-
-import com.github.fabianmurariu.g4s.graph.core.UndirectedGraph
+import com.github.fabianmurariu.g4s.graph.core.{Graph, AdjacencyMap}
 
 case class QueryGraph(
-    graph: Id[Map[Int, Set[Int]]],
-    id: Int,
-    metaN: Map[Int, QueryNode],
-    metaE: Map[(Int, Int), QueryEdge]
+    graph: Id[AdjacencyMap[QueryNode, QueryEdge]],
+    id: Int
 )
 
 case class QueryNode(id: Int, labels: Set[String])
@@ -35,7 +32,7 @@ object QueryGraph {
 
   object Dsl {
 
-    import UndirectedGraph.ops._
+    val G = Graph[AdjacencyMap, Id]
 
     type Query[T] = State[QueryGraph, T]
 
@@ -43,9 +40,8 @@ object QueryGraph {
       val id = qg.id
       val qn = QueryNode(id, labels.toSet)
       qg.copy(
-        graph = qg.graph.insertNode(id),
+        graph = G.insertVertex(qg.graph)(qn),
         id = id + 1,
-        metaN = qg.metaN + (id -> qn)
       ) -> qn
     }
 
@@ -56,8 +52,7 @@ object QueryGraph {
     ): Query[QueryNode] = State { qg =>
       val qe = QueryEdge(src.id, Some(dst.id), types.toSet)
       qg.copy(
-        graph = qg.graph.insertEdge(src.id, dst.id),
-        metaE = qg.metaE + ((src.id, dst.id) -> qe)
+        graph = G.insertEdge(qg.graph)(src, dst, qe),
       ) -> dst
     }
 

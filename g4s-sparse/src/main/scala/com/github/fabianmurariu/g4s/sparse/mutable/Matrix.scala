@@ -90,6 +90,8 @@ object Matrix {
 
     def resize(rows: Long, cols: Long): Unit = M.resize(self)(rows, cols)
 
+    def copyData(implicit MH:MatrixHandler[M, A]) = 
+      MH.copyData(self)
   }
 
   def apply[M[_]](implicit M: Matrix[M]): Matrix[M] = M
