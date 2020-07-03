@@ -81,4 +81,28 @@ object Graph {
     new ImmutableAdjacencyMapGraphInstance[F]
 
   def apply[G[_, _], F[_]](implicit G: Graph[G, F]): Graph[G, F] = G
+
+  trait GraphOps[G[_, _], F[_], V, E] extends Any {
+
+    def self: F[G[V, E]]
+
+    def G: Graph[G, F]
+
+    def neighbours(v: V): F[Traversable[(V, E)]] =
+      G.neighbours(self)(v)
+
+  }
+
+  implicit def decorateGraphOps[G[_, _], F[_], V, E](
+      fg: F[G[V, E]]
+  )(implicit GG: Graph[G, F]) = new GraphOps[G, F, V, E] {
+
+    override def self: F[G[V, E]] = fg
+
+    override def G: Graph[G, F] = GG
+
+  }
+  // implicit class GraphOpsF[G[_, _], F[_], V, E](val fg: F[G[V, E]]) extends AnyVal with GraphOps[G, F] {
+
+  // }
 }

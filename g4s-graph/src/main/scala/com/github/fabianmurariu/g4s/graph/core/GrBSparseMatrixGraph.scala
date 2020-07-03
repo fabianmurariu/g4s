@@ -136,7 +136,7 @@ object GrBSparseMatrixGraph {
                 src2DstEdges.put(d, e)
               val dst2SrcEdges =
                 g.indexE.getOrElseUpdate(d, mutable.Map.empty[Long, E])
-                dst2SrcEdges.put(d, e)
+                dst2SrcEdges.put(s, e)
           }
 
           g
