@@ -40,23 +40,24 @@ object GrBSparseMatrixGraph {
   ): Graph[GrBSparseMatrixGraph, Task] =
     new Graph[GrBSparseMatrixGraph, Task] {
 
+      private def selectors(cols: Long) = {
+        for {
+          add <- GrBMonoid[Boolean](OPS.any, true)
+          semiring <- GrBSemiring[Boolean, Boolean, Boolean](add, OPS.pair)
+          selector <- GrBMatrix[Boolean](1, cols)
+        } yield (selector, semiring)
+      }
+
       override def neighbours[V, E](fg: zio.Task[GrBSparseMatrixGraph[V, E]])(
           v: V
-      ): zio.Task[Traversable[(V, E)]] = fg.flatMap { g =>
+      ): zio.Task[Iterable[(V, E)]] = fg.flatMap { g =>
         //get indices
         g.indexV.get(v) match {
           case None =>
-            Task(Traversable.empty)
+            Task(Iterable.empty)
           case Some(id) =>
-            val rows = g.edges.nrows
-            val sel = for {
-              add <- GrBMonoid[Boolean](OPS.any, true)
-              semiring <- GrBSemiring[Boolean, Boolean, Boolean](add, OPS.pair)
-              selector <- GrBMatrix[Boolean](1, rows)
-            } yield (selector, semiring)
-
             //TODO: this is terrible fix this
-            sel.use {
+            selectors(g.edges.ncols).use {
               case (m, semi) =>
                 m.set(0, id, true)
                 m.nvals // force
@@ -80,12 +81,12 @@ object GrBSparseMatrixGraph {
       }
 
       override def vertices[V, E](
-          g: zio.Task[GrBSparseMatrixGraph[V, E]]
-      ): zio.Task[Traversable[V]] = ???
+          fg: zio.Task[GrBSparseMatrixGraph[V, E]]
+      ): zio.Task[Iterable[V]] = fg.map { g => g.indexV.keys }
 
       override def edgesTriples[V, E](
           g: zio.Task[GrBSparseMatrixGraph[V, E]]
-      ): zio.Task[Traversable[(V, E, V)]] = ???
+      ): zio.Task[Iterable[(V, E, V)]] = ???
 
       override def containsV[V, E](fg: zio.Task[GrBSparseMatrixGraph[V, E]])(
           v: V
@@ -133,10 +134,10 @@ object GrBSparseMatrixGraph {
               g.edges.set(d, s, true)
               val src2DstEdges =
                 g.indexE.getOrElseUpdate(s, mutable.Map.empty[Long, E])
-                src2DstEdges.put(d, e)
+              src2DstEdges.put(d, e)
               val dst2SrcEdges =
                 g.indexE.getOrElseUpdate(d, mutable.Map.empty[Long, E])
-                dst2SrcEdges.put(s, e)
+              dst2SrcEdges.put(s, e)
           }
 
           g
@@ -156,11 +157,23 @@ object GrBSparseMatrixGraph {
 
       override def sizeG[V, E](
           g: zio.Task[GrBSparseMatrixGraph[V, E]]
-      ): zio.Task[Int] = ???
+      ): zio.Task[Long] = ???
 
-      override def degree[V, E](g: zio.Task[GrBSparseMatrixGraph[V, E]])(
+      override def degree[V, E](fg: zio.Task[GrBSparseMatrixGraph[V, E]])(
           v: V
-      ): zio.Task[Int] = ???
+      ): zio.Task[Option[Long]] = fg.flatMap { g =>
+        selectors(g.edges.ncols).use {
+          case (selector, semi) =>
+            g.indexV.get(v) match {
+              case Some(id) =>
+                selector.set(0, id, true)
+                MxM[GrBMatrix]
+                  .mxm(selector)(semi)(selector, g.edges)
+                  .map(m => Some(m.nvals))
+              case None => Task(None)
+            }
+        }
+      }
 
       override def empty[V, E]: zio.Task[GrBSparseMatrixGraph[V, E]] = ???
     }

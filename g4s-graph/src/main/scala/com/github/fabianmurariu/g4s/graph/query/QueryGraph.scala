@@ -16,6 +16,9 @@ case class QueryEdge(src: Int, dst: Option[Int], types: Set[String])
 
 object QueryGraph {
 
+
+  def empty = QueryGraph(Map.empty, 0)
+
   trait NodeDsl[F[_]] {
     def out(f: F[QueryNode])(types: String*): F[QueryEdge]
     def in(f: F[QueryNode])(types: String*): F[QueryEdge]
@@ -23,9 +26,7 @@ object QueryGraph {
   }
 
   trait EdgeDsl[F[_]] {
-
     def vs(f: F[QueryEdge])(types: String*): F[QueryNode]
-
     def vs(f: F[QueryEdge])(v: QueryNode): F[QueryNode]
 
   }
@@ -41,18 +42,18 @@ object QueryGraph {
       val qn = QueryNode(id, labels.toSet)
       qg.copy(
         graph = G.insertVertex(qg.graph)(qn),
-        id = id + 1,
+        id = id + 1
       ) -> qn
     }
 
-    def edge[F[_]](
+    def edge(
         src: QueryNode,
         dst: QueryNode,
         types: String*
     ): Query[QueryNode] = State { qg =>
       val qe = QueryEdge(src.id, Some(dst.id), types.toSet)
       qg.copy(
-        graph = G.insertEdge(qg.graph)(src, dst, qe),
+        graph = G.insertEdge(qg.graph)(src, dst, qe)
       ) -> dst
     }
 
@@ -64,9 +65,9 @@ object QueryGraph {
 
     trait QueryEdgeOps[F[_]] extends Any {
       def self: F[QueryEdge]
-    def vs(f: F[QueryEdge])(types: String*): F[QueryNode] = ???
+      def vs(f: F[QueryEdge])(types: String*): F[QueryNode] = ???
 
-    def vs(f: F[QueryEdge])(v: QueryNode): F[QueryNode] = ???
+      def vs(f: F[QueryEdge])(v: QueryNode): F[QueryNode] = ???
     }
 
     implicit class QueryNodeDsl[F[_]](val self: F[QueryNode])

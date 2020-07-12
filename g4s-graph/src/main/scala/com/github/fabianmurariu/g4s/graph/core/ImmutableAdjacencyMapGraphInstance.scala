@@ -10,14 +10,14 @@ class ImmutableAdjacencyMapGraphInstance[F[_]: Monad]
 
   override def neighbours[V, E](g: F[AdjacencyMap[V, E]])(
       v: V
-  ): F[Traversable[(V, E)]] = g.map(_.getOrElse(v, Map.empty))
+  ): F[Iterable[(V, E)]] = g.map(_.getOrElse(v, Map.empty))
 
-  override def vertices[V, E](g: F[AdjacencyMap[V, E]]): F[Traversable[V]] =
+  override def vertices[V, E](g: F[AdjacencyMap[V, E]]): F[Iterable[V]] =
     g.map(_.keySet)
 
   override def edgesTriples[V, E](
       fg: F[AdjacencyMap[V, E]]
-  ): F[Traversable[(V, E, V)]] =
+  ): F[Iterable[(V, E, V)]] =
     fg.map(_.flatMap {
       case (v, edges) =>
         (edges.map { case (n, e) => (v, e, n) }) // FIXME: this returns every edge twice
@@ -32,21 +32,24 @@ class ImmutableAdjacencyMapGraphInstance[F[_]: Monad]
 
   override def orderG[V, E](fg: F[AdjacencyMap[V, E]]): F[Int] = fg.map(_.size)
 
-  override def sizeG[V, E](fg: F[AdjacencyMap[V, E]]): F[Int] = fg.flatMap {
+  override def sizeG[V, E](fg: F[AdjacencyMap[V, E]]): F[Long] = fg.flatMap {
     g =>
       g.keys.toStream
-        .foldLeftM(0)((sum, v) => degree(fg)(v).map(_ + sum))
+        .foldLeftM(0L) { (sum, v) =>
+          degree(fg)(v).map(dg => dg.getOrElse(0L) + sum)
+        }
         .map(_ / 2)
   }
 
-  override def degree[V, E](fg: F[AdjacencyMap[V, E]])(v: V): F[Int] = fg.map {
-    g =>
-      val edges = g.getOrElse(v, Map.empty)
-      if (edges.contains(v))
-        edges.size + 1
-      else
-        edges.size
-  }
+  override def degree[V, E](fg: F[AdjacencyMap[V, E]])(v: V): F[Option[Long]] =
+    fg.map { g =>
+      g.get(v).map { edges =>
+        if (edges.contains(v))
+          edges.size + 1
+        else
+          edges.size
+      }
+    }
 
   override def insertVertex[V, E](
       fg: F[AdjacencyMap[V, E]]

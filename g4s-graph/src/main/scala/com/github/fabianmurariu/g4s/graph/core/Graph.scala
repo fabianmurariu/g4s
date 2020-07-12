@@ -7,17 +7,18 @@ import cats.implicits._
 import scala.annotation.tailrec
 import cats.Monad
 import cats.Functor
+import scala.collection.immutable.Queue
 
 /**
   * Undirected Graph allowing self pointing edges (x) -> (x)
   */
 trait Graph[G[_, _], F[_]] { self =>
 
-  def neighbours[V, E](fg: F[G[V, E]])(v: V): F[Traversable[(V, E)]]
+  def neighbours[V, E](fg: F[G[V, E]])(v: V): F[Iterable[(V, E)]]
 
-  def vertices[V, E](g: F[G[V, E]]): F[Traversable[V]]
+  def vertices[V, E](g: F[G[V, E]]): F[Iterable[V]]
 
-  def edgesTriples[V, E](g: F[G[V, E]]): F[Traversable[(V, E, V)]]
+  def edgesTriples[V, E](g: F[G[V, E]]): F[Iterable[(V, E, V)]]
 
   def containsV[V, E](g: F[G[V, E]])(v: V): F[Boolean]
 
@@ -33,15 +34,15 @@ trait Graph[G[_, _], F[_]] { self =>
 
   def orderG[V, E](g: F[G[V, E]]): F[Int]
 
-  def sizeG[V, E](g: F[G[V, E]]): F[Int]
+  def sizeG[V, E](g: F[G[V, E]]): F[Long]
 
-  def degree[V, E](g: F[G[V, E]])(v: V): F[Int]
+  def degree[V, E](g: F[G[V, E]])(v: V): F[Option[Long]]
 
   /* ************************************************** */
 
   def adjacentEdges[V, E](g: F[G[V, E]])(
       v: V
-  )(implicit F: Functor[F]): F[Traversable[E]] =
+  )(implicit F: Functor[F]): F[Iterable[E]] =
     self.neighbours(g)(v).map(_.map(_._2))
 
   def density[V, E](g: F[G[V, E]])(implicit F: Monad[F]): F[Double] =
@@ -50,26 +51,66 @@ trait Graph[G[_, _], F[_]] { self =>
       e <- self.sizeG(g)
     } yield (2 * (e - n + 1)) / (n * (n - 3) + 2)
 
+  def connectedComponents[V, E](
+      fg: F[G[V, E]]
+  )(implicit M: Monad[F]): F[List[Map[V, Option[V]]]] = {
+
+    def step(
+        ccsF: F[List[Map[V, Option[V]]]],
+        v: V
+    ): F[List[Map[V, Option[V]]]] = {
+      ccsF.flatMap { ccs =>
+        if (ccs.nonEmpty && ccs.map(cc => cc.contains(v)).reduceLeft(_ || _)) M.pure(ccs)
+        else {
+          bfs(fg)(v).map(cc => cc :: ccs)
+        }
+      }
+    }
+
+    val vs = self.vertices(fg).map(_.toVector)
+    self.vertices(fg).flatMap { vs =>
+      vs.foldLeft(M.pure(List.empty[Map[V, Option[V]]])) { (ccsF, v) =>
+        val out = step(ccsF, v)
+        out
+      }
+    }
+  }
+
+  import TraverseOrder.ops._
+
   def dfs[V, E](
       g: F[G[V, E]]
-  )(v: V)(implicit F: Monad[F]): F[Map[V, Option[V]]] = {
+  )(v: V)(implicit F: Monad[F]): F[Map[V, Option[V]]] =
+    traverseGraph[V, E, List](g)(v)
 
-    val dfsLoop = F.iterateUntilM(List(v), Map(v -> Option.empty[V])) {
-      case (Nil, history) =>
-        F.pure((Nil, history)) // to ward off the warning but won't hit
-      case (parent :: tail, history) =>
-        self
-          .neighbours(g)(parent)
-          .map {
-            _.foldLeft(tail -> history) {
-              case ((t, h), (c, _)) if !history.contains(c) => // node not seen
-                (c :: t, h + (c -> Some(parent)))
-              case (orElse, _) => orElse // when node is already in instory
+  def bfs[V, E](
+      g: F[G[V, E]]
+  )(v: V)(implicit F: Monad[F]): F[Map[V, Option[V]]] =
+    traverseGraph[V, E, Queue](g)(v)
+
+  def traverseGraph[V, E, C[_]](
+      g: F[G[V, E]]
+  )(v: V)(implicit F: Monad[F], TO: TraverseOrder[C]): F[Map[V, Option[V]]] = {
+
+    val traverseLoop =
+      F.iterateUntilM(TraverseOrder[C].pure(v), Map(v -> Option.empty[V])) {
+        case (order, history) if order.isEmpty =>
+          F.pure((TO.empty, history)) // to ward off the warning but won't hit
+        case (order, history) =>
+          val (parent, tail) = order.pop
+          self
+            .neighbours(g)(parent)
+            .map {
+              _.foldLeft(tail -> history) {
+                case ((t, h), (c, _))
+                    if !history.contains(c) => // node not seen
+                  (t.push(c), h + (c -> Some(parent)))
+                case (orElse, _) => orElse // when node is already in instory
+              }
             }
-          }
-    } { case (stack, _) => stack.isEmpty }
+      } { case (stack, _) => stack.isEmpty }
 
-    dfsLoop.map(_._2)
+    traverseLoop.map(_._2)
   }
 
   def empty[V, E]: F[G[V, E]]
@@ -88,9 +129,16 @@ object Graph {
 
     def G: Graph[G, F]
 
-    def neighbours(v: V): F[Traversable[(V, E)]] =
+    def neighbours(v: V): F[Iterable[(V, E)]] =
       G.neighbours(self)(v)
 
+    def insertEdge(src: V, dst: V, e: E) =
+      G.insertEdge(self)(src, dst, e)
+
+    def insertVertex(v: V) =
+      G.insertVertex(self)(v)
+
+    def connectedComponents(implicit M: Monad[F]) = G.connectedComponents(self)
   }
 
   implicit def decorateGraphOps[G[_, _], F[_], V, E](
@@ -102,7 +150,43 @@ object Graph {
     override def G: Graph[G, F] = GG
 
   }
-  // implicit class GraphOpsF[G[_, _], F[_], V, E](val fg: F[G[V, E]]) extends AnyVal with GraphOps[G, F] {
+}
 
-  // }
+@typeclass trait TraverseOrder[F[_]] {
+  def push[A](f: F[A])(a: A): F[A]
+  def pop[A](f: F[A]): (A, F[A])
+  def isEmpty[A](f: F[A]): Boolean
+
+  def pure[A](a: A): F[A]
+  def empty[A]: F[A]
+}
+
+object TraverseOrder {
+  implicit val stackTraverseOrder: TraverseOrder[List] =
+    new TraverseOrder[List] {
+
+      def isEmpty[A](f: List[A]): Boolean = f.isEmpty
+
+      def push[A](f: List[A])(a: A): List[A] = a :: f
+
+      def pop[A](f: List[A]): (A, List[A]) = f.head -> f.tail
+
+      def pure[A](a: A): List[A] = List(a)
+
+      def empty[A] = List.empty[A]
+    }
+
+  implicit val queueTraverseOrder: TraverseOrder[Queue] =
+    new TraverseOrder[Queue] {
+
+      def isEmpty[A](f: Queue[A]): Boolean = f.isEmpty
+
+      def push[A](f: Queue[A])(a: A): Queue[A] = f.enqueue(a)
+
+      def pop[A](f: Queue[A]): (A, Queue[A]) = f.head -> f.tail
+
+      def pure[A](a: A): Queue[A] = Queue(a)
+
+      def empty[A] = Queue.empty[A]
+    }
 }
