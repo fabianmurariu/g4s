@@ -4,36 +4,40 @@ import cats.free.Free
 import cats.free.Free.liftF
 import cats.{~>, Id}
 import cats.data.State
-import com.github.fabianmurariu.g4s.graph.core.{Graph, AdjacencyMap}
+import com.github.fabianmurariu.g4s.graph.core.{Graph, AdjacencyMap, DGraph}
+import simulacrum.typeclass
+import com.github.fabianmurariu.g4s.graph.{
+  MatrixAlgebra,
+  MatIntersect,
+  NodesMat,
+  NodeMat
+}
+import com.github.fabianmurariu.g4s.graph.MatUnion
 
 case class QueryGraph(
     graph: Id[AdjacencyMap[QueryNode, QueryEdge]],
     id: Int
 )
 
-case class QueryNode(id: Int, labels: Set[String])
-case class QueryEdge(src: Int, dst: Option[Int], types: Set[String])
+sealed trait AddOp
+case object AND extends AddOp
+case object OR extends AddOp
+
+case class QueryNode(id: Int, labels: Set[String] = Set.empty, add: AddOp = AND)
+case class QueryEdge(
+    src: Int,
+    dst: Option[Int],
+    types: Set[String],
+    add: AddOp = OR
+)
 
 object QueryGraph {
 
-
   def empty = QueryGraph(Map.empty, 0)
 
-  trait NodeDsl[F[_]] {
-    def out(f: F[QueryNode])(types: String*): F[QueryEdge]
-    def in(f: F[QueryNode])(types: String*): F[QueryEdge]
-
-  }
-
-  trait EdgeDsl[F[_]] {
-    def vs(f: F[QueryEdge])(types: String*): F[QueryNode]
-    def vs(f: F[QueryEdge])(v: QueryNode): F[QueryNode]
-
-  }
+  val G = DGraph[AdjacencyMap, Id]
 
   object Dsl {
-
-    val G = Graph[AdjacencyMap, Id]
 
     type Query[T] = State[QueryGraph, T]
 
@@ -57,25 +61,32 @@ object QueryGraph {
       ) -> dst
     }
 
-    trait QueryNodeOps[F[_]] extends Any {
-      def self: F[QueryNode]
-      def out(types: String*): F[QueryEdge] = ???
-      def in(types: String*): F[QueryEdge] = ???
-    }
+  }
 
-    trait QueryEdgeOps[F[_]] extends Any {
-      def self: F[QueryEdge]
-      def vs(f: F[QueryEdge])(types: String*): F[QueryNode] = ???
+  /**
+    * Naive mapping from query to matrix algebra
+    * good place to start
+    */
+  def evalQueryGraph(qg: QueryGraph): Seq[MatrixAlgebra] = {
+    val edges = G.edgesTriples(qg.graph)
+    val (src, e, dst) = edges.head
 
-      def vs(f: F[QueryEdge])(v: QueryNode): F[QueryNode] = ???
-    }
+    Seq.empty
+  }
 
-    implicit class QueryNodeDsl[F[_]](val self: F[QueryNode])
-        extends AnyVal
-        with QueryNodeOps[F]
-    implicit class QueryEdgeDsl[F[_]](val self: F[QueryEdge])
-        extends AnyVal
-        with QueryEdgeOps[F]
+  def queryNodeToMatrixAlgebra(qn: QueryNode): MatrixAlgebra = qn match {
+    case QueryNode(_, labels, _) if labels.isEmpty   => NodesMat
+    case QueryNode(_, labels, _) if labels.size == 1 => NodeMat(labels.head)
+    case QueryNode(_, labels, AND) =>
+      labels
+        .map(NodeMat(_))
+        .map(_.asInstanceOf[MatrixAlgebra])
+        .reduce((a, b) => MatIntersect(a, b))
+    case QueryNode(_, labels, OR) =>
+      labels
+        .map(NodeMat(_))
+        .map(_.asInstanceOf[MatrixAlgebra])
+        .reduce((a, b) => MatUnion(a, b))
   }
 
 }

@@ -10,8 +10,13 @@ abstract class UndirectedSimpleGraphSpec[G[_, _], F[_]](name: String)(
   import Prop.forAll
   import GP._
 
+
   property("return a vertex inserted") = forAll { i: Int =>
     withEmptyGraph[Int, Int, Prop](returnAVertexInserted(_)(i))
+  }
+
+  property("find an edge between two graphs") = forAll { v: (Int, String, Int) =>
+    withEmptyGraph[Int, String, Prop](returnEdgeBetweenVertices(_)(v))
   }
 
   property("link 2 vertices, they are eachother neightbours") = forAll {

@@ -8,15 +8,20 @@ import scala.annotation.tailrec
 import cats.Monad
 import cats.Functor
 import scala.collection.immutable.Queue
+import cats.effect.Resource
+import cats.Traverse
+import cats.Foldable
 
 /**
-  * Undirected Graph allowing self pointing edges (x) -> (x)
+  * Graph allowing self pointing edges (x) -> (x)
   */
 trait Graph[G[_, _], F[_]] { self =>
 
   def neighbours[V, E](fg: F[G[V, E]])(v: V): F[Iterable[(V, E)]]
 
   def vertices[V, E](g: F[G[V, E]]): F[Iterable[V]]
+
+  def edges[V, E](fg: F[G[V, E]])(v: V): F[Iterable[E]]
 
   def edgesTriples[V, E](g: F[G[V, E]]): F[Iterable[(V, E, V)]]
 
@@ -38,11 +43,24 @@ trait Graph[G[_, _], F[_]] { self =>
 
   def degree[V, E](g: F[G[V, E]])(v: V): F[Option[Long]]
 
+  def empty[V, E]: Resource[F, G[V, E]]
+
+  def load[V, E, C[_]: Foldable](ts: C[(V, E, V)])(
+      implicit F: Monad[F]
+  ): Resource[F, G[V, E]] =
+    Graph.fromTriplets[V, E, C, G, F](ts)(Foldable[C], F, self)
+
   /* ************************************************** */
+
+  def insertVertices[V, E, C[_]: Foldable](
+      fg: F[G[V, E]]
+  )(vs: C[V])(implicit M: Monad[F]) = fg.flatMap { g =>
+    vs.foldM[F, G[V, E]](g) { (fg, v) => self.insertVertex(M.pure(g))(v) }
+  }
 
   def adjacentEdges[V, E](g: F[G[V, E]])(
       v: V
-  )(implicit F: Functor[F]): F[Iterable[E]] =
+  )(implicit F: Monad[F]): F[Iterable[E]] =
     self.neighbours(g)(v).map(_.map(_._2))
 
   def density[V, E](g: F[G[V, E]])(implicit F: Monad[F]): F[Double] =
@@ -60,7 +78,8 @@ trait Graph[G[_, _], F[_]] { self =>
         v: V
     ): F[List[Map[V, Option[V]]]] = {
       ccsF.flatMap { ccs =>
-        if (ccs.nonEmpty && ccs.map(cc => cc.contains(v)).reduceLeft(_ || _)) M.pure(ccs)
+        if (ccs.nonEmpty && ccs.map(cc => cc.contains(v)).reduceLeft(_ || _))
+          M.pure(ccs)
         else {
           bfs(fg)(v).map(cc => cc :: ccs)
         }
@@ -113,13 +132,12 @@ trait Graph[G[_, _], F[_]] { self =>
     traverseLoop.map(_._2)
   }
 
-  def empty[V, E]: F[G[V, E]]
 }
 
 object Graph {
 
   implicit def adjacencyMapIsAGraph[F[_]: Monad] =
-    new ImmutableAdjacencyMapGraphInstance[F]
+    new ImmutableAdjacencyMapUndirectedGraphInstance[F]
 
   def apply[G[_, _], F[_]](implicit G: Graph[G, F]): Graph[G, F] = G
 
@@ -129,8 +147,14 @@ object Graph {
 
     def G: Graph[G, F]
 
-    def neighbours(v: V): F[Iterable[(V, E)]] =
+    def neighbours(v: V)(implicit F: Monad[F]): F[Iterable[(V, E)]] =
       G.neighbours(self)(v)
+
+    def vertices: F[Iterable[V]] =
+      G.vertices(self)
+
+    def edges(implicit F: Functor[F]): F[Iterable[E]] =
+      G.edgesTriples(self).map(_.map(_._2))
 
     def insertEdge(src: V, dst: V, e: E) =
       G.insertEdge(self)(src, dst, e)
@@ -138,7 +162,14 @@ object Graph {
     def insertVertex(v: V) =
       G.insertVertex(self)(v)
 
-    def connectedComponents(implicit M: Monad[F]) = G.connectedComponents(self)
+    def containsV(v: V) =
+      G.containsV(self)(v)
+
+    def getEdge(src: V, dst:V) =
+      G.getEdge(self)(src, dst)
+
+    def connectedComponents(implicit M: Monad[F]) =
+      G.connectedComponents(self)
   }
 
   implicit def decorateGraphOps[G[_, _], F[_], V, E](
@@ -149,6 +180,21 @@ object Graph {
 
     override def G: Graph[G, F] = GG
 
+  }
+
+  def fromTriplets[V, E, C[_]:Foldable, G[_, _], F[_]: Monad](
+      ts: C[(V, E, V)]
+  )(implicit G: Graph[G, F]): Resource[F, G[V, E]] = {
+    G.empty[V, E].evalMap { graph =>
+      ts.foldM[F, G[V, E]](graph) {
+          case (fg, (src, e, dst)) =>
+            Monad[F]
+              .pure(fg)
+              .insertVertex(src)
+              .insertVertex(dst)
+              .insertEdge(src, dst, e)
+        }
+    }
   }
 }
 
@@ -162,7 +208,7 @@ object Graph {
 }
 
 object TraverseOrder {
-  implicit val stackTraverseOrder: TraverseOrder[List] =
+  implicit val dfs: TraverseOrder[List] =
     new TraverseOrder[List] {
 
       def isEmpty[A](f: List[A]): Boolean = f.isEmpty
@@ -176,7 +222,7 @@ object TraverseOrder {
       def empty[A] = List.empty[A]
     }
 
-  implicit val queueTraverseOrder: TraverseOrder[Queue] =
+  implicit val bfs: TraverseOrder[Queue] =
     new TraverseOrder[Queue] {
 
       def isEmpty[A](f: Queue[A]): Boolean = f.isEmpty

@@ -8,6 +8,8 @@ import com.github.fabianmurariu.g4s.sparse.grb.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
+import cats.effect.Resource
+import zio.interop.catz._
 
 class GrBSparseMatrixGraph[V, E] private (
     private[core] val edges: GrBMatrix[Boolean],
@@ -24,7 +26,7 @@ object GrBSparseMatrixGraph {
   def empty[V, E] = {
     val rows = 16L
     val cols = 16L
-    GrBMatrix[Boolean](rows, cols).map { edges =>
+    GrBMatrix.asResource[Task, Boolean](rows, cols).map { edges =>
       new GrBSparseMatrixGraph[V, E](
         edges,
         mutable.Map.empty[Long, mutable.Map[Long, E]],
@@ -84,6 +86,11 @@ object GrBSparseMatrixGraph {
           fg: zio.Task[GrBSparseMatrixGraph[V, E]]
       ): zio.Task[Iterable[V]] = fg.map { g => g.indexV.keys }
 
+      override def edges[V, E](
+                fg: zio.Task[GrBSparseMatrixGraph[V, E]]
+      )(v:V): Task[Iterable[E]] = {
+        ???
+      }
       override def edgesTriples[V, E](
           g: zio.Task[GrBSparseMatrixGraph[V, E]]
       ): zio.Task[Iterable[(V, E, V)]] = ???
@@ -95,8 +102,14 @@ object GrBSparseMatrixGraph {
       }
 
       override def getEdge[V, E](
-          g: zio.Task[GrBSparseMatrixGraph[V, E]]
-      )(v1: V, v2: V): zio.Task[Option[E]] = ???
+          fg: zio.Task[GrBSparseMatrixGraph[V, E]]
+      )(v1: V, v2: V): zio.Task[Option[E]] = fg.map{ g =>
+        for {
+          src <- g.indexV.get(v1)
+          dst <- g.indexV.get(v2)
+          e <- g.indexE.get(src).flatMap(_.get(dst))
+        } yield e
+      }
 
       override def insertVertex[V, E](fg: zio.Task[GrBSparseMatrixGraph[V, E]])(
           v: V
@@ -175,7 +188,8 @@ object GrBSparseMatrixGraph {
         }
       }
 
-      override def empty[V, E]: zio.Task[GrBSparseMatrixGraph[V, E]] = ???
+      override def empty[V, E]: Resource[zio.Task, GrBSparseMatrixGraph[V, E]] =
+        GrBSparseMatrixGraph.empty[V, E]
     }
 
 }

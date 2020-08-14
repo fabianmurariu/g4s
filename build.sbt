@@ -3,7 +3,7 @@ ThisBuild / organization := "com.github.fabianmurariu"
 
 val scalaTest = "org.scalatest" %% "scalatest" % "3.1.2"
 val scalaTestScalaCheck = "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2"
-val grbVersion = "0.1.9"
+val grbVersion = "0.1.11"
 
 lazy val commonSettings = Seq(
     scalacOptions += "-Ypartial-unification",
@@ -13,6 +13,7 @@ lazy val commonSettings = Seq(
       "dev.zio" %% "zio-interop-cats" % "2.1.3.0-RC15",
       "com.github.mpilquist" %% "simulacrum" % "0.19.0",
       "org.typelevel" %% "discipline-scalatest" % "1.0.1" % Test,
+      "com.softwaremill.diffx" %% "diffx-scalatest" % "0.3.29" % Test,
       scalaTest % Test,
       scalaTestScalaCheck % Test),
 

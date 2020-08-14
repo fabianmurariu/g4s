@@ -4,6 +4,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import zio._
 import zio.interop.catz._
 import org.scalatest.matchers.must.Matchers
+import GraphProps._
 
 object GrBSparseMatrixGraphSpec
     extends UndirectedSimpleGraphSpec[GrBSparseMatrixGraph, Task](

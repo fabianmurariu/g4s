@@ -3,7 +3,7 @@ package com.github.fabianmurariu.g4s.sparse.grb
 import com.github.fabianmurariu.g4s.sparse.mutable.MatrixLike
 import zio._
 
-trait MxM[M[_]] extends MatrixLike[M] {
+trait MxM[M[_]] {
   def mxm[A, B, C:MatrixBuilder, X](into:M[C])(
       semiring: GrBSemiring[A, B, C],
       mask: Option[GrBMatrix[X]] = None,
@@ -17,13 +17,13 @@ trait MxM[M[_]] extends MatrixLike[M] {
       mask: Option[GrBMatrix[X]] = None,
       accum: Option[GrBBinaryOp[C, C, C]] = None,
       desc: Option[GrBDescriptor] = None
-  )(fa:M[A], fb:M[B]): TaskManaged[M[C]] = {
+  )(fa:M[A], fb:M[B])(implicit M:MatrixLike[M]): TaskManaged[M[C]] = {
 
     // FIXME: assumes no transpose, this can fail otherwise
-    val rows = nrows(fa)
-    val cols = ncols(fb)
+    val rows = M.nrows(fa)
+    val cols = M.ncols(fb)
 
-    val cRes = make[C](rows, cols)
+    val cRes = M.make[C](rows, cols)
 
     cRes.mapM { c =>
       mxm(c)(semiring, mask, accum, desc)(fa, fb)

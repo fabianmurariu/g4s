@@ -5,16 +5,9 @@ import java.nio.Buffer
 import scala.{specialized => sp}
 import simulacrum.typeclass
 import com.github.fabianmurariu.g4s.sparse.grb.{
-  GrBBinaryOp,
-  ElemWise,
-  Reduce,
-  GrBMonoid,
-  GrBMatrix,
-  EqOp,
-  MatrixHandler
+  MatrixHandler, MatrixBuilder
 }
 import zio._
-import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
 
 @typeclass trait MatrixLike[M[_]] {
   def nvals[A](f: M[A]): Long

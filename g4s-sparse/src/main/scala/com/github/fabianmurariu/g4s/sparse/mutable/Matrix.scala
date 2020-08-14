@@ -19,7 +19,7 @@ trait Matrix[M[_]] extends MatrixLike[M] with ElemWise[M] with MxM[M] { self =>
     * Returns true if op(fa, fb) is true for each pair of items (elem wise)
     */
   def isAny[A](fa1: M[A])(fa2: M[A], op: GrBBinaryOp[A, A, Boolean])(
-      implicit R: Reduce[M, Boolean]
+      implicit R: Reduce[M, Boolean], M:MatrixLike[M]
   ): Task[Boolean] = IO.effectSuspend {
     if (nrows(fa1) != nrows(fa2))
       IO.succeed(false)
@@ -48,7 +48,7 @@ trait Matrix[M[_]] extends MatrixLike[M] with ElemWise[M] with MxM[M] { self =>
   }
 
   def isEq[A](fa1: M[A], fa2: M[A])
-          (implicit R: Reduce[M, Boolean], EQ: EqOp[A]): Task[Boolean] = {
+          (implicit R: Reduce[M, Boolean], EQ: EqOp[A], M:MatrixLike[M]): Task[Boolean] = {
     isAny(fa1)(fa2, EQ)
   }
 
@@ -61,14 +61,14 @@ object Matrix {
     def M: Matrix[M]
 
     def isAny(fa2: M[A], op: GrBBinaryOp[A, A, Boolean])(
-        implicit R: Reduce[M, Boolean]
+        implicit R: Reduce[M, Boolean], ML:MatrixLike[M]
     ): Task[Boolean] = {
       M.isAny(self)(fa2, op)
     }
 
     def isEq(
         fa2: M[A]
-    )(implicit R: Reduce[M, Boolean], EQ: EqOp[A]): Task[Boolean] = {
+    )(implicit R: Reduce[M, Boolean], EQ: EqOp[A], ML:MatrixLike[M]): Task[Boolean] = {
       M.isEq(self, fa2)
     }
 

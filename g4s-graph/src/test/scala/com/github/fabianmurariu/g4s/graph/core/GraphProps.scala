@@ -3,6 +3,9 @@ package com.github.fabianmurariu.g4s.graph.core
 import cats.{Monad, Comonad, Foldable, Id}
 import Graph.decorateGraphOps
 import org.scalacheck.Prop
+import cats.effect.Sync
+import cats.Applicative
+import cats.effect.Bracket
 
 abstract class GraphProps[G[_, _], F[_]](
     implicit GG: Graph[G, F],
@@ -15,19 +18,21 @@ abstract class GraphProps[G[_, _], F[_]](
   import cats.instances.list._
   def G = GG
 
+  def load[V, E, C[_]: Foldable](fg: F[G[V, E]])(ccs: C[(V, E, V)]) =
+    Foldable[C]
+      .foldLeftM[F, (V, E, V), F[G[V, E]]](ccs, fg) {
+        case (fg, (src, e, dst)) =>
+          M.pure(
+            fg.insertVertex(src).insertVertex(dst).insertEdge(src, dst, e)
+          )
+      }
+      .flatten
+
+
   def canFind2ConnectedComponentsInAGraph[V, E](fg: F[G[V, E]])(
       cc1: List[(V, E, V)],
       cc2: List[(V, E, V)]
   ): Boolean = {
-    def load(fg: F[G[V, E]])(ccs: List[(V, E, V)]) =
-      Foldable[List]
-        .foldLeftM[F, (V, E, V), F[G[V, E]]](ccs, fg) {
-          case (fg, (src, e, dst)) =>
-            M.pure(
-              fg.insertVertex(src).insertVertex(dst).insertEdge(src, dst, e)
-            )
-        }
-        .flatten
 
     val ccsF = load(load(fg)(cc1))(cc2).connectedComponents
     val prop = ccsF.map { ccs => ccs.length == 2 }
@@ -37,10 +42,13 @@ abstract class GraphProps[G[_, _], F[_]](
 
   def returnAVertexInserted[V, E](
       fg: F[G[V, E]]
-  )(expected: V): Prop = {
+  )(v: V): Prop = {
+      C.extract(fg.insertVertex(v).containsV(v))
+  }
 
-    val newG = G.insertVertex(fg)(expected)
-    C.extract(G.containsV(newG)(expected))
+  def returnEdgeBetweenVertices[V, E](fg: F[G[V, E]])(x: (V, E, V)): Prop = {
+    val (src, e, dst) = x
+    C.extract(fg.insertVertex(src).insertVertex(dst).insertEdge(src, dst, e).getEdge(src, dst)) == Some(e)
   }
 
   def undirectedLink2VerticesAreEachotherNeighbour[V, E](
@@ -126,29 +134,36 @@ object GraphProps {
 
   }
 
-  implicit val adjacencyMapGraphProps: GraphProps[AdjacencyMap, Id] =
-    new GraphProps[AdjacencyMap, Id] {
+  implicit val comonadForIO: Comonad[cats.effect.IO] =
+    new Comonad[cats.effect.IO] {
 
-      override def withEmptyGraph[V, E, A](
-          f: cats.Id[
-            com.github.fabianmurariu.g4s.graph.core.AdjacencyMap[V, E]
-          ] => A
-      ): A =
-        f(G.empty[V, E])
+      override def map[A, B](fa: cats.effect.IO[A])(
+          f: A => B
+      ): cats.effect.IO[B] = fa.map(f)
 
+      override def coflatMap[A, B](
+          fa: cats.effect.IO[A]
+      )(f: cats.effect.IO[A] => B): cats.effect.IO[B] =
+        cats.effect.IO {
+          f(fa)
+        }
+
+      override def extract[A](x: cats.effect.IO[A]): A =
+        x.unsafeRunSync()
     }
 
-  implicit val grbSparseMatrixGraphProps
-      : GraphProps[GrBSparseMatrixGraph, Task] =
-    new GraphProps[GrBSparseMatrixGraph, Task] {
+  implicit def graphProps[G[_, _], F[_]: Sync: Comonad](
+      implicit G: Graph[G, F]
+  ): GraphProps[G, F] =
+    new GraphProps[G, F] {
 
       override def withEmptyGraph[V, E, A](
-          f: Task[GrBSparseMatrixGraph[V, E]] => A
-      ): A = {
-        Comonad[Task].extract(
-          GrBSparseMatrixGraph.empty[V, E].use(g => Task(f(Task(g))))
+          f: F[G[V, E]] => A
+      ): A =
+        Comonad[F].extract(
+          G.empty[V, E]
+            .use { g => Sync[F].delay(f(Sync[F].pure(g))) }
         )
-      }
 
     }
 

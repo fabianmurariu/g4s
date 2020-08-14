@@ -9,8 +9,10 @@ import zio.Task
 import zio.Exit.Failure
 import zio.Exit.Success
 import cats.Foldable
+import cats.effect.IO
+import GraphProps._
 
 object AdjacencyMapIdGraphSpec
-    extends UndirectedSimpleGraphSpec[AdjacencyMap, Id](
+    extends UndirectedSimpleGraphSpec[AdjacencyMap, IO](
       "Adjacency Map is a Graph"
     )

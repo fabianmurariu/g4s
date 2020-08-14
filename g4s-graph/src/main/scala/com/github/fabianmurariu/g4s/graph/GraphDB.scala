@@ -19,6 +19,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.MatrixBuilder
 import zio._
 import fs2.Stream
 import simulacrum.typeclass
+import com.github.fabianmurariu.g4s.graph.query.QueryGraph
 
 /**
   * Naive first pass implementation of a Graph database
@@ -215,4 +216,5 @@ object GraphDB {
       }
     } yield pair
   }
+
 }

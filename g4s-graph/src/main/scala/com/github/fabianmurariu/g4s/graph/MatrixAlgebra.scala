@@ -2,33 +2,22 @@ package com.github.fabianmurariu.g4s.graph
 
 sealed trait MatrixAlgebra
 
+sealed trait Operand extends MatrixAlgebra
+
+sealed trait Operation extends MatrixAlgebra
 /**
  * Diagonal matrix with true on the row number corresponding to vertex id
  */
-case class NodeSelection(label:String) extends MatrixAlgebra
+case object NodesMat extends Operand
 
-/**
- * Edge Matrix
- */
-case class EdgeSelection(tpe:String, transpose:Boolean) extends MatrixAlgebra
+case object EdgesMat extends Operand
 
-/**
- * E = A + B (element wise add on OP)
- */
-case class ElemWiseAlg(mats:Seq[MatrixAlgebra], op:MatrixOp) extends MatrixAlgebra
+case class NodeMat(label:String) extends Operand
 
-/**
- * E = A * B (where * is a semiring, most likely ANY_PAIR)
- */
-case class MxMAlg(left: MatrixAlgebra, right:MatrixAlgebra, op:MatrixOp) extends MatrixAlgebra
+case class EdgeMat(tpe:String) extends Operand
 
-sealed trait MatrixOp
+case class Transpose(ma:MatrixAlgebra) extends Operation
 
-case object And extends MatrixOp
-
-case object Or extends MatrixOp
-
-
-object MatrixAlgebra {
-
-}
+case class MatMul(left:MatrixAlgebra, right:MatrixAlgebra) extends Operation
+case class MatIntersect(left:MatrixAlgebra, right:MatrixAlgebra) extends Operation
+case class MatUnion(left:MatrixAlgebra, right:MatrixAlgebra) extends Operation

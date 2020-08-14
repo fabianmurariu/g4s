@@ -4,13 +4,45 @@ import cats.Monad
 import cats.implicits._
 import cats.Traverse
 import cats.Foldable
+import cats.effect.Resource
 
-class ImmutableAdjacencyMapGraphInstance[F[_]: Monad]
-    extends Graph[AdjacencyMap, F] {
+class ImmutableAdjacencyMapDirectedGraphInstance[F[_]: Monad]
+    extends DGraph[AdjacencyMap, F] {
+
+  def outEdges[V, E](fg: F[AdjacencyMap[V, E]])(v: V): F[Iterable[E]] =
+    fg.map { g => g.getOrElse(v, Map.empty).map { _._2 } }
+
+  def inEdges[V, E](fg: F[AdjacencyMap[V, E]])(v: V): F[Iterable[E]] = ???
+
+  def outDegree[V, E](fg: F[AdjacencyMap[V, E]])(v: V): F[Int] = ???
+
+  def inDegree[V, E](fg: F[AdjacencyMap[V, E]])(v: V): F[Int] = ???
+
+  override def outNeighbours[V, E](
+      fg: F[AdjacencyMap[V, E]]
+  )(v: V): F[Iterable[(V, E)]] =
+    fg.map(g => g.getOrElse(v, Map.empty))
+
+  override def inNeighbours[V, E](
+      fg: F[AdjacencyMap[V, E]]
+  )(v: V): F[Iterable[(V, E)]] = fg.map { g =>
+    g.getOrElse(v, Map.empty)
+      .flatMap { case (n, _) => g.getOrElse(n, Map.empty).filterKeys(_ == v) }
+  }
 
   override def neighbours[V, E](g: F[AdjacencyMap[V, E]])(
       v: V
-  ): F[Iterable[(V, E)]] = g.map(_.getOrElse(v, Map.empty))
+  ): F[Iterable[(V, E)]] =
+    for {
+      out <- outNeighbours(g)(v)
+      in <- inNeighbours(g)(v)
+    } yield out ++ in
+
+  override def edges[V, E](fg: F[AdjacencyMap[V, E]])(v: V): F[Iterable[E]] =
+    for {
+      out <- outEdges(fg)(v)
+      in <- inEdges(fg)(v)
+    } yield out ++ in
 
   override def vertices[V, E](g: F[AdjacencyMap[V, E]]): F[Iterable[V]] =
     g.map(_.keySet)
@@ -20,7 +52,7 @@ class ImmutableAdjacencyMapGraphInstance[F[_]: Monad]
   ): F[Iterable[(V, E, V)]] =
     fg.map(_.flatMap {
       case (v, edges) =>
-        (edges.map { case (n, e) => (v, e, n) }) // FIXME: this returns every edge twice
+        (edges.map { case (n, e) => (v, e, n) })
     })
 
   override def containsV[V, E](fg: F[AdjacencyMap[V, E]])(v: V): F[Boolean] =
@@ -64,12 +96,11 @@ class ImmutableAdjacencyMapGraphInstance[F[_]: Monad]
   override def insertEdge[V, E](
       fg: F[AdjacencyMap[V, E]]
   )(src: V, dst: V, e: E): F[AdjacencyMap[V, E]] = fg.map { g =>
-    val op = for {
-      srcEdges <- g.get(src)
-      dstEdges <- g.get(dst)
-    } yield g +
-      (src -> (srcEdges + (dst -> e))) +
-      (dst -> (dstEdges + (src -> e)))
+    val op =
+      for {
+        srcEdges <- g.get(src)
+      } yield g +
+        (src -> (srcEdges + (dst -> e)))
 
     op.getOrElse(g)
   }
@@ -92,16 +123,16 @@ class ImmutableAdjacencyMapGraphInstance[F[_]: Monad]
   override def removeEdge[V, E](
       fg: F[AdjacencyMap[V, E]]
   )(src: V, dst: V): F[AdjacencyMap[V, E]] = fg.map { g =>
-    val op = for {
-      srcEdges <- g.get(src)
-      dstEdges <- g.get(dst)
-    } yield g +
-      (src -> (srcEdges - dst)) +
-      (dst -> (dstEdges - src))
+    val op =
+      for {
+        srcEdges <- g.get(src)
+      } yield g +
+        (src -> (srcEdges - dst))
 
     op.getOrElse(g)
   }
 
-  override def empty[V, E]: F[AdjacencyMap[V, E]] = Monad[F].pure(Map.empty)
+  override def empty[V, E]: Resource[F, AdjacencyMap[V, E]] =
+    Resource.pure[F, AdjacencyMap[V, E]](Map.empty)
 
 }
