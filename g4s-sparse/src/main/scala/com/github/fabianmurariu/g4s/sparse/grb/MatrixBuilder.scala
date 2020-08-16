@@ -13,6 +13,7 @@ object MatrixBuilder {
   implicit def matrixBuilder[A: MatrixType]: MatrixBuilder[A] =
     new MatrixBuilder[A] {
       override def build(rows: Long, cols: Long): Buffer = {
+        grb.GRB // init the GRB subsystem
         GRBCORE.createMatrix(MatrixType[A].get, rows, cols)
       }
     }
