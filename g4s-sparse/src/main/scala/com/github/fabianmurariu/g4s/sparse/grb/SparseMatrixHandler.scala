@@ -5,14 +5,23 @@ import java.nio.Buffer
 import com.github.fabianmurariu.unsafe.GRBCORE
 import com.github.fabianmurariu.unsafe.GRAPHBLAS
 
-trait SparseMatrixHandler[T] {
+trait SparseMatrixHandler[@specialized(Boolean, Byte, Short, Int, Long, Float, Double) T] {
   def createMatrix(rows: Long, cols: Long): Buffer
-  def createMatrix(rows:Long, cols:Long)
+  def createMatrixFromTuples(rows:Long, cols:Long)
                   (is: Array[Long], js: Array[Long], vs: Array[T]): Buffer
 
   def get(mat: Buffer)(i: Long, j: Long): Array[T]
 
   def set(mat: Buffer)(i: Long, j: Long, t: T): Unit
+
+  def setAll(mat: Buffer)(is: Array[Long], js: Array[Long], ts: Array[T]): Unit = {
+    assert(is.length == js.length && js.length == ts.length)
+    var i = 0
+    while (i < is.length) {
+      set(mat)(is(i), js(i), ts(i))
+      i+=1
+    }
+  }
 
   def remove(mat: Buffer)(i: Long, j: Long): Unit =
     GRBCORE.removeElementMatrix(mat, i, j)
@@ -42,7 +51,7 @@ object SparseMatrixHandler {
       (is, js, vs)
     }
 
-    override def createMatrix(rows:Long, cols:Long)
+    override def createMatrixFromTuples(rows:Long, cols:Long)
                              (is: Array[Long], js: Array[Long], vs: Array[Boolean]): Buffer = {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
@@ -68,7 +77,7 @@ object SparseMatrixHandler {
       (is, js, vs)
     }
 
-    override def createMatrix(rows:Long, cols:Long)
+    override def createMatrixFromTuples(rows:Long, cols:Long)
                              (is: Array[Long], js: Array[Long], vs: Array[Byte]): Buffer = {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
@@ -96,7 +105,7 @@ object SparseMatrixHandler {
     }
 
 
-    override def createMatrix(rows:Long, cols:Long)
+    override def createMatrixFromTuples(rows:Long, cols:Long)
                              (is: Array[Long], js: Array[Long], vs: Array[Short]): Buffer = {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
@@ -123,7 +132,7 @@ object SparseMatrixHandler {
     }
 
 
-    override def createMatrix(rows:Long, cols:Long)
+    override def createMatrixFromTuples(rows:Long, cols:Long)
                              (is: Array[Long], js: Array[Long], vs: Array[Int]): Buffer = {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
@@ -150,7 +159,7 @@ object SparseMatrixHandler {
     }
 
 
-    override def createMatrix(rows:Long, cols:Long)
+    override def createMatrixFromTuples(rows:Long, cols:Long)
                              (is: Array[Long], js: Array[Long], vs: Array[Long]): Buffer = {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
@@ -177,7 +186,7 @@ object SparseMatrixHandler {
     }
 
 
-    override def createMatrix(rows:Long, cols:Long)
+    override def createMatrixFromTuples(rows:Long, cols:Long)
                              (is: Array[Long], js: Array[Long], vs: Array[Float]): Buffer = {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
@@ -204,7 +213,7 @@ object SparseMatrixHandler {
     }
 
 
-    override def createMatrix(rows:Long, cols:Long)
+    override def createMatrixFromTuples(rows:Long, cols:Long)
                              (is: Array[Long], js: Array[Long], vs: Array[Double]): Buffer = {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)

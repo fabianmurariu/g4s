@@ -1,117 +1,159 @@
 package com.github.fabianmurariu.g4s.sparse.grb
 
-import zio._
 import com.github.fabianmurariu.unsafe.GRBALG
 import scala.{specialized => sp}
+import java.nio.Buffer
 
-trait Reduce[M[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A] {
+trait Reduce[@sp(Boolean, Byte, Short, Int, Long, Float, Double) A] {
   @inline
-  def reduceAll(f: M[A])(
+  def reduceAll(mat: Buffer)(
       init: A,
       monoid: GrBMonoid[A],
       accum: Option[GrBBinaryOp[A, A, A]] = None,
       desc: Option[GrBDescriptor] = None
-  ): Task[A]
+  ): A
 
   @inline
-  def reduceNumeric(f:M[A])(
+  def reduceNumeric(mat: Buffer)(
       monoid: GrBMonoid[A],
       accum: Option[GrBBinaryOp[A, A, A]] = None,
       desc: Option[GrBDescriptor] = None
-  )(implicit N:Numeric[A]) : Task[A] = {
-    reduceAll(f)(N.zero, monoid, accum, desc)
+  )(implicit N: Numeric[A]): A = {
+    reduceAll(mat)(N.zero, monoid, accum, desc)
   }
 }
 
 object Reduce {
-  implicit val reduceMatrixBoolean: Reduce[GrBMatrix, Boolean] =
-    new Reduce[GrBMatrix, Boolean] {
+  implicit val reduceMatrixBoolean: Reduce[Boolean] =
+    new Reduce[Boolean] {
 
-      override def reduceAll(f: GrBMatrix[Boolean])(
+      override def reduceAll(mat: Buffer)(
           init: Boolean,
           monoid: GrBMonoid[Boolean],
           accum: Option[GrBBinaryOp[Boolean, Boolean, Boolean]],
           desc: Option[GrBDescriptor]
-      ): Task[Boolean] = IO.effect {
-        GRBALG.matrixReduceAllBoolean(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
+      ): Boolean = {
+        GRBALG.matrixReduceAllBoolean(
+          init,
+          accum.map(_.pointer).orNull,
+          monoid.pointer,
+          mat,
+          desc.map(_.pointer).orNull
+        )
       }
     }
 
-  implicit val reduceMatrixByte: Reduce[GrBMatrix, Byte] =
-    new Reduce[GrBMatrix, Byte] {
+  implicit val reduceMatrixByte: Reduce[Byte] =
+    new Reduce[Byte] {
 
-      override def reduceAll(f: GrBMatrix[Byte])(
+      override def reduceAll(mat: Buffer)(
           init: Byte,
           monoid: GrBMonoid[Byte],
           accum: Option[GrBBinaryOp[Byte, Byte, Byte]],
           desc: Option[GrBDescriptor]
-      ): Task[Byte] = IO.effect{
-        GRBALG.matrixReduceAllByte(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
+      ): Byte = {
+        GRBALG.matrixReduceAllByte(
+          init,
+          accum.map(_.pointer).orNull,
+          monoid.pointer,
+          mat,
+          desc.map(_.pointer).orNull
+        )
       }
     }
 
-  implicit val reduceMatrixShort: Reduce[GrBMatrix, Short] =
-    new Reduce[GrBMatrix, Short] {
+  implicit val reduceMatrixShort: Reduce[Short] =
+    new Reduce[Short] {
 
-      override def reduceAll(f: GrBMatrix[Short])(
+      override def reduceAll(mat: Buffer)(
           init: Short,
           monoid: GrBMonoid[Short],
           accum: Option[GrBBinaryOp[Short, Short, Short]],
           desc: Option[GrBDescriptor]
-      ): Task[Short] = IO.effect{
-        GRBALG.matrixReduceAllShort(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
+      ): Short = {
+        GRBALG.matrixReduceAllShort(
+          init,
+          accum.map(_.pointer).orNull,
+          monoid.pointer,
+          mat,
+          desc.map(_.pointer).orNull
+        )
       }
     }
 
-  implicit val reduceMatrixInt: Reduce[GrBMatrix, Int] =
-    new Reduce[GrBMatrix, Int] {
+  implicit val reduceMatrixInt: Reduce[Int] =
+    new Reduce[Int] {
 
-      override def reduceAll(f: GrBMatrix[Int])(
+      override def reduceAll(mat: Buffer)(
           init: Int,
           monoid: GrBMonoid[Int],
           accum: Option[GrBBinaryOp[Int, Int, Int]],
           desc: Option[GrBDescriptor]
-      ): Task[Int] = IO.effect{
-        GRBALG.matrixReduceAllInt(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
+      ): Int = {
+        GRBALG.matrixReduceAllInt(
+          init,
+          accum.map(_.pointer).orNull,
+          monoid.pointer,
+          mat,
+          desc.map(_.pointer).orNull
+        )
       }
     }
 
-  implicit val reduceMatrixLong: Reduce[GrBMatrix, Long] =
-    new Reduce[GrBMatrix, Long] {
+  implicit val reduceMatrixLong: Reduce[Long] =
+    new Reduce[Long] {
 
-      override def reduceAll(f: GrBMatrix[Long])(
+      override def reduceAll(mat: Buffer)(
           init: Long,
           monoid: GrBMonoid[Long],
           accum: Option[GrBBinaryOp[Long, Long, Long]],
           desc: Option[GrBDescriptor]
-      ): Task[Long] = IO.effect{
-        GRBALG.matrixReduceAllLong(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
+      ): Long = {
+        GRBALG.matrixReduceAllLong(
+          init,
+          accum.map(_.pointer).orNull,
+          monoid.pointer,
+          mat,
+          desc.map(_.pointer).orNull
+        )
       }
     }
 
-  implicit val reduceMatrixFloat: Reduce[GrBMatrix, Float] =
-    new Reduce[GrBMatrix, Float] {
+  implicit val reduceMatrixFloat: Reduce[Float] =
+    new Reduce[Float] {
 
-      override def reduceAll(f: GrBMatrix[Float])(
+      override def reduceAll(mat: Buffer)(
           init: Float,
           monoid: GrBMonoid[Float],
           accum: Option[GrBBinaryOp[Float, Float, Float]],
           desc: Option[GrBDescriptor]
-      ): Task[Float] = Task.effect{
-        GRBALG.matrixReduceAllFloat(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
+      ): Float = {
+        GRBALG.matrixReduceAllFloat(
+          init,
+          accum.map(_.pointer).orNull,
+          monoid.pointer,
+          mat,
+          desc.map(_.pointer).orNull
+        )
       }
     }
 
-  implicit val reduceDouble: Reduce[GrBMatrix, Double] =
-    new Reduce[GrBMatrix, Double] {
+  implicit val reduceDouble: Reduce[Double] =
+    new Reduce[Double] {
 
-      override def reduceAll(f: GrBMatrix[Double])(
+      override def reduceAll(mat: Buffer)(
           init: Double,
           monoid: GrBMonoid[Double],
           accum: Option[GrBBinaryOp[Double, Double, Double]],
           desc: Option[GrBDescriptor]
-      ): Task[Double] = IO.effect{
-        GRBALG.matrixReduceAllDouble(init, accum.map(_.pointer).orNull, monoid.pointer, f.pointer, desc.map(_.pointer).orNull)
+      ): Double = {
+        GRBALG.matrixReduceAllDouble(
+          init,
+          accum.map(_.pointer).orNull,
+          monoid.pointer,
+          mat,
+          desc.map(_.pointer).orNull
+        )
       }
     }
 }

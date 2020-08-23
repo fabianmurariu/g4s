@@ -5,16 +5,28 @@ import java.nio.Buffer
 import cats.Monad
 import cats.implicits._
 import com.github.fabianmurariu.unsafe.GRBCORE
-import com.github.fabianmurariu.g4s.sparse.grb.{
-  MatrixBuilder,
-  SparseMatrixHandler
-}
+import com.github.fabianmurariu.g4s.sparse.grb.{SparseMatrixHandler, grb}
 import cats.effect.Sync
 import cats.MonadError
 import cats.Applicative
 import cats.Foldable
+import scala.reflect.ClassTag
+import scala.{specialized => sp}
+import cats.effect.Bracket
+import cats.effect.ExitCase
+import cats.effect.ExitCase.{Completed, Error}
+import com.github.fabianmurariu.unsafe.GRAPHBLAS
+import java.{util => ju}
+import com.github.fabianmurariu.g4s.sparse.grb.Reduce
+import com.github.fabianmurariu.g4s.sparse.grb.ElemWise
+import cats.data.EitherT
+import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
+import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
+import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
+import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 
-trait Matrix[F[_], A] extends BaseMatrix[F] { self =>
+trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
+    extends BaseMatrix[F] { self =>
   private[grbv2] def H: SparseMatrixHandler[A]
 
   def get(i: Long, j: Long): F[Option[A]] = pointer.map { mp =>
@@ -25,21 +37,95 @@ trait Matrix[F[_], A] extends BaseMatrix[F] { self =>
     H.set(mp.ref)(i, j, a)
   }
 
-  def set(is:Iterable[Long], js:Iterable[Long], vs:Iterable[A]):F[Matrix[F, A]] = {
-    (is, js, vs).zipped.toStream.foldM[F, Matrix[F, A]](self){
-      case (m, (i, j, v)) => m.set(i, j, v).map(_ => self)
-    }
+  def set(is: Iterable[Long], js: Iterable[Long], vs: Iterable[A])(
+      implicit CT: ClassTag[A]
+  ): F[Matrix[F, A]] =
+    pointer
+      .map { mp => H.setAll(mp.ref)(is.toArray, js.toArray, vs.toArray) }
+      .map(_ => self)
+
+  def set(
+      tuples: Iterable[(Long, Long, A)]
+  )(implicit CT: ClassTag[A]): F[Matrix[F, A]] = {
+    val s = tuples.toStream
+    val is = s.map(_._1)
+    val js = s.map(_._2)
+    val vs = s.map(_._3)
+    set(is, js, vs)
   }
 
   def extract: F[(Array[Long], Array[Long], Array[A])] = pointer.map { mp =>
     H.extractTuples(mp.ref)
   }
 
-  def duplicateF(implicit FF:Sync[F]): Resource[F, Matrix[F, A]] =
+  def reduce(init: A, monoid: GrBMonoid[A])(implicit R: Reduce[A]): F[A] =
+    self.pointer.map { p => R.reduceAll(p.ref)(init, monoid) }
+
+  def reduceN(
+      monoid: GrBMonoid[A]
+  )(implicit R: Reduce[A], N: Numeric[A]): F[A] =
+    reduce(N.zero, monoid)
+
+  def isAll(
+      other: Matrix[F, A]
+  )(op: GrBBinaryOp[A, A, Boolean])(implicit S: Sync[F]): F[Boolean] = {
+
+    def eqEither[T](s1: T, s2: T)(msg:String): EitherT[F, String, Boolean] =
+      if (s1 == s2) EitherT.fromEither(Right(true))
+      else EitherT.fromEither(Left(msg))
+
+    def eqIntersect(
+        expectedNVals: Long,
+        r: Long,
+        c: Long
+    ): F[Either[String, Boolean]] = {
+      (for {
+        m <- Matrix[F, Boolean](r, c)
+        land <- GrBMonoid[F, Boolean](BuiltInBinaryOps.boolean.land, false)
+      } yield (m, land)).use {
+        case (m, land) =>
+          val eF: EitherT[F, String, Boolean] = for {
+            inter <- EitherT.right(
+              ElemWise[F].intersect(m)(Left(op))(self, other)
+            )
+            nvals <- EitherT.right(inter.nvals)
+            _ <- eqEither(expectedNVals, nvals)(s"different nvals after intersect $expectedNVals != $nvals")
+            check <- EitherT.right(inter.reduce(true, land))
+            out <- eqEither(true, check)("different values")
+          } yield out
+          eF.value
+      }
+    }
+
+    val eF = for {
+      r1 <- EitherT.right(self.nrows)
+      r2 <- EitherT.right(other.nrows)
+      _ <- eqEither(r1, r2)(s"different rows $r1 != $r2")
+      c1 <- EitherT.right(self.ncols)
+      c2 <- EitherT.right(other.ncols)
+      _ <- eqEither(c1, c2)(s"different cols $c1 != c2")
+      v1 <- EitherT.right(self.nvals)
+      v2 <- EitherT.right(other.nvals)
+      _ <- eqEither(v1, v2)(s"different nvals $v1 != $v2")
+      _ <- EitherT(eqIntersect(v1, r1, c1))
+    } yield true
+
+    eF.value.map {
+      case Right(_) => true
+      case Left(_)  => false
+    }
+  }
+
+  def isEq(other: Matrix[F, A])(implicit EQ: EqOp[A], S: Sync[F]): F[Boolean] =
+    isAll(other)(EQ)
+
+  def duplicateF(implicit FF: Sync[F]): Resource[F, Matrix[F, A]] =
     for {
       p <- Resource.liftF(pointer)
-      pDup <- Pointer.apply(GRBCORE.dupMatrix(p.ref))(FF)
-    } yield new Matrix[F, A]{
+      pDup <- Resource.fromAutoCloseable(
+        FF.delay(new MatrixPointer(GRBCORE.dupMatrix(p.ref)))
+      )
+    } yield new Matrix[F, A] {
 
       override def F: Monad[F] = FF
 
@@ -47,9 +133,14 @@ trait Matrix[F[_], A] extends BaseMatrix[F] { self =>
 
       val pointer = F.pure(pDup)
     }
+
 }
 
-trait BaseMatrix[F[_]] extends Container[F] { self =>
+trait BaseMatrix[F[_]] { self =>
+
+  def pointer: F[Pointer]
+
+  implicit def F: Monad[F]
 
   def remove(i: Long, j: Long): F[Unit] = pointer.map { mp =>
     GRBCORE.removeElementMatrix(mp.ref, i, j)
@@ -58,6 +149,12 @@ trait BaseMatrix[F[_]] extends Container[F] { self =>
   def ncols: F[Long] = pointer.map { mp => GRBCORE.ncols(mp.ref) }
 
   def nrows: F[Long] = pointer.map { mp => GRBCORE.nrows(mp.ref) }
+
+  def shape: F[(Long, Long)] =
+    for {
+      n <- ncols
+      r <- nrows
+    } yield (n, r)
 
   def nvals: F[Long] = pointer.map { mp => GRBCORE.nvalsMatrix(mp.ref) }
 
@@ -69,94 +166,71 @@ trait BaseMatrix[F[_]] extends Container[F] { self =>
 
 }
 
-trait Container[F[_]] { self =>
-
-  private[grbv2] def pointer: F[Pointer]
-
-  implicit def F: Monad[F]
-
-}
-
-private[grbv2] sealed trait Pointer {
+private[grbv2] sealed trait Pointer extends AutoCloseable {
   def ref: Buffer
-  def free: Unit
 }
 
 class MatrixPointer(val ref: Buffer) extends Pointer {
-  def free =
+
+  override def close(): Unit =
     GRBCORE.freeMatrix(ref)
+
 }
 
 class VectorPointer(val ref: Buffer) extends Pointer {
-  def free =
+  override def close(): Unit =
     GRBCORE.freeVector(ref)
 }
 
-object Pointer {
-
-  private[grbv2] def matrixPointer[F[_]](
-      b: => Buffer
-  )(implicit M: Applicative[F]): Resource[F, Either[Throwable, MatrixPointer]] = {
-    Resource.make {
-      M.pure {
-        try {
-          Right(
-            new MatrixPointer(b)
-          )
-        } catch {
-          case t: Throwable =>
-            Left(t)
-        }
-      }
-    } {
-      case Right(matPointer) => M.pure(matPointer.free)
-      case _                 => M.unit
-    }
-  }
-
-  private[grbv2] def apply[F[_]](
-      b: => Buffer
-  )(implicit M: Sync[F]): Resource[F, MatrixPointer] = {
-    Resource.make (M.delay(new MatrixPointer(b))) (p => M.delay(p.free))
-  }
-
-  private[grbv2] def vectorPointer[F[_]](
-      b: Buffer
-  )(implicit M: Monad[F]): Resource[F, VectorPointer] = {
-    Resource.make(M.pure(new VectorPointer(b)))(p => M.pure(p.free))
-  }
-}
-
 object Matrix {
-  def matrixOrError[F[_], A](rows: Long, cols: Long)(
-      implicit M: Monad[F],
-      MB: MatrixBuilder[A],
-      SMH: SparseMatrixHandler[A]
-  ): Resource[F, Either[Throwable, Matrix[F, A]]] = {
-    Pointer.matrixPointer[F](MB.build(rows, cols)).map {
-      _.map { mp =>
+
+  def csc[F[_], A](rows: Long, cols: Long)(
+      implicit M: Sync[F],
+      SMH: SparseMatrixHandler[A],
+  ) = apply[F, A](rows, cols).evalMap {
+    _.pointer.map(p => GRBCORE.makeCSC(p.ref))
+  }
+
+  def apply[F[_], A](rows: Long, cols: Long)(
+      implicit M: Sync[F],
+      SMH: SparseMatrixHandler[A],
+  ): Resource[F, Matrix[F, A]] = {
+    Resource
+      .fromAutoCloseable(
+        M.delay {
+          grb.GRB
+          new MatrixPointer(SMH.createMatrix(rows, cols))
+        }
+      )
+      .map { mp =>
         new Matrix[F, A] {
           val pointer = M.pure(mp)
           override def F = M
           override def H = SMH
         }
       }
-    }
   }
 
-  def apply[F[_], A](rows: Long, cols: Long)(
+  def fromTuples[F[_], A](
+      rows: Long,
+      cols: Long
+  )(is: Array[Long], js: Array[Long], vs: Array[A])(
       implicit M: Sync[F],
-      MB: MatrixBuilder[A],
-      SMH: SparseMatrixHandler[A]
+      SMH: SparseMatrixHandler[A],
   ): Resource[F, Matrix[F, A]] = {
-    for {
-      p <- Resource.make {
-        M.delay(new MatrixPointer(MB.build(rows, cols)))
-      } { p => M.delay { p.free } }
-    } yield new Matrix[F, A] {
-      val pointer = M.pure(p)
-      override def F = M
-      override def H = SMH
-    }
+    Resource
+      .fromAutoCloseable(
+        M.delay {
+          grb.GRB
+          new MatrixPointer(SMH.createMatrixFromTuples(rows, cols)(is, js, vs))
+        }
+      )
+      .map { mp =>
+        new Matrix[F, A] {
+          val pointer = M.pure(mp)
+          override def F = M
+          override def H = SMH
+        }
+      }
   }
 }

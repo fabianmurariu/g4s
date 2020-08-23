@@ -1,9 +1,10 @@
 package com.github.fabianmurariu.g4s.sparse.grb
-import zio._
 import java.nio.Buffer
 import com.github.fabianmurariu.unsafe.GRAPHBLAS
 import com.github.fabianmurariu.unsafe.GRBMONOID
 import com.github.fabianmurariu.unsafe.GRBCORE
+import cats.effect.Resource
+import cats.effect.Sync
 
 final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T) extends AutoCloseable {
 
@@ -15,9 +16,9 @@ final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T) extends Auto
 }
 
 object GrBMonoid {
-  def apply[T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T) =
-    Managed.fromAutoCloseable(
-      IO.effect{
+  def apply[F[_]:Sync, T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T) =
+    Resource.fromAutoCloseable(
+      Sync[F].delay{
         grb.GRB
         new GrBMonoid(MonoidBuilder[T].createMonoid(op.pointer, zero), zero)
 }
