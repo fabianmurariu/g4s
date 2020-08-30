@@ -98,9 +98,20 @@ trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
       shape <- Resource.liftF(self.shape)
       c <- Matrix[F, A](shape._2, shape._1)
       _ <- Resource.liftF(
-        MatrixOps.transpose[F, A, A, A, X](c)(mask, accum, desc)(self)
+        MatrixOps.transpose[F, A, A, A, X](c)(self)(mask, accum, desc)
       )
     } yield c
+  }
+
+
+  def extract[X](is:GrBRange, js:GrBRange)(from: Matrix[F, A],
+      mask: Option[Matrix[F, X]] = None,
+      accum: Option[GrBBinaryOp[A, A, A]] = None,
+      desc: Option[GrBDescriptor] = None
+  )(implicit S: Sync[F]): F[Matrix[F, A]] = {
+
+    implicit val H: SparseMatrixHandler[A] = self.H
+    MatrixOps.assign(self)(from, is, js)(mask, accum, desc)
   }
 
   def reduce(init: A, monoid: GrBMonoid[A])(implicit R: Reduce[A]): F[A] =
@@ -180,6 +191,7 @@ trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
 
       val pointer = F.pure(pDup)
     }
+
 
 }
 

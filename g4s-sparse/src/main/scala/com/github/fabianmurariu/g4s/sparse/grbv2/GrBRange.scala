@@ -2,7 +2,7 @@ package com.github.fabianmurariu.g4s.sparse.grbv2
 
 import com.github.fabianmurariu.unsafe.GRBCORE
 
-case class GrBRange(start: Long, end: Long, inc: Long)
+case class GrBRange(start: Long, end: Long, inc: Long = 1L)
 
 object GrBRange {
 
@@ -10,16 +10,16 @@ object GrBRange {
     require(r.start >= 0  && r.end >= 0 && r.step != 0)
     r.isInclusive match {
     case true =>
-      GrBRange(r.start, r.end + 1L, r.step) // GrBRanges are always exclusive
+      GrBRange(r.start, r.end, r.step) // GrBRanges are always exclusive
     case false =>
-      GrBRange(r.start, r.end, r.step)
+      GrBRange(r.start, r.end -1 , r.step)
     }
   }
 
-  def toGrB(r: Range):(Long, Array[Long]) = {
-    val grb = GrBRange(r)
 
-    grb.inc match {
+  def toGrB(r: GrBRange):(Long, Array[Long]) = {
+
+    r.inc match {
       case 1 =>
         val ni = GRBCORE.GxB_RANGE
         val i:Array[Long] = Array(r.start, r.end)
@@ -34,4 +34,6 @@ object GrBRange {
         (ni, i)
     }
   }
+
+  implicit def rangIsGrBRange(r:Range):GrBRange = apply(r)
 }

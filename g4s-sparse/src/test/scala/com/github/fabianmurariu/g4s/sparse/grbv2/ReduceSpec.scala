@@ -22,7 +22,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.MonoidBuilder
 import scala.math.Numeric.Implicits._
 import com.github.fabianmurariu.g4s.sparse.grb.SparseVectorHandler
 
-class ReduceSpec extends ScalaCheckSuite {
+class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
 
   implicit val ec = ExecutionContext.global
 
@@ -31,14 +31,6 @@ class ReduceSpec extends ScalaCheckSuite {
       .withMinSuccessfulTests(50)
       .withMaxDiscardRatio(10)
 
-  def tuples[A: ClassTag](m: MatrixTuples[A]) = {
-
-    val is = m.tuples.map(_._1).toArray
-    val js = m.tuples.map(_._2).toArray
-    val vs = m.tuples.map(_._3).toArray
-
-    (is, js, vs)
-  }
 
   def reduceSpec[
       A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: Reduce: EqOp: MonoidBuilder: SparseVectorHandler
