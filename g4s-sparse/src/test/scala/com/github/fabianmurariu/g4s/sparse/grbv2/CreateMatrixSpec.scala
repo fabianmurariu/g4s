@@ -4,7 +4,11 @@ import org.scalacheck.Prop._
 import org.scalacheck.{Arbitrary, Gen}
 import cats.implicits._
 import scala.reflect.ClassTag
-import com.github.fabianmurariu.g4s.sparse.grb.{SparseMatrixHandler, Reduce, EqOp}
+import com.github.fabianmurariu.g4s.sparse.grb.{
+  SparseMatrixHandler,
+  Reduce,
+  EqOp
+}
 import scala.concurrent.ExecutionContext
 import cats.effect.{IO, Resource}
 import scala.concurrent.Future
@@ -16,24 +20,70 @@ import scala.collection.generic.CanBuildFrom
 class CreateMatrixSpec extends ScalaCheckSuite {
   implicit val ec = ExecutionContext.global
 
-  def createdProp[A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: Reduce : EqOp] = {
+  def tuples[A: ClassTag](m: MatrixTuples[A]) = {
+
+    val is = m.tuples.map(_._1).toArray
+    val js = m.tuples.map(_._2).toArray
+    val vs = m.tuples.map(_._3).toArray
+
+    (is, js, vs)
+  }
+
+  def createdProp[
+      A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: Reduce: EqOp
+  ] = {
 
     property(
-      s" duplicated matrix equals itself ${implicitly[ClassTag[A]]}"
+      s"resize matrix has different shape ${implicitly[ClassTag[A]]}"
     ) {
-      forAll {
-        m:MatrixTuples[A] =>
-        val is = m.tuples.map(_._1).toArray
-        val js = m.tuples.map(_._2).toArray
-        val vs = m.tuples.map(_._3).toArray
+      forAll { m: MatrixTuples[A] =>
+        val (is, js, vs) = tuples(m)
+        val io = Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs).use {
+          mat =>
+            for {
+              _ <- mat.resize(m.rows + 5, m.cols + 5)
+              s <- mat.shape
+            } yield s
+        }
+        assertEquals(io.unsafeRunSync(), (m.rows + 5, m.cols + 5))
+      }
+    }
+
+    property(
+      s"duplicated matrix equals itself ${implicitly[ClassTag[A]]}"
+    ) {
+      forAll { m: MatrixTuples[A] =>
+        val (is, js, vs) = tuples(m)
 
         val io = for {
           a <- Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
           b <- a.duplicateF
         } yield (a, b)
 
-        io.use{case (a, b) => a.isEq(b)}.unsafeRunSync()
+        io.use { case (a, b) => a.isEq(b) }.unsafeRunSync()
 
+      }
+    }
+
+    property(
+      s"transposed matrix has shape flipped itself ${implicitly[ClassTag[A]]}"
+    ) {
+      forAll { m: MatrixTuples[A] =>
+        val (is, js, vs) = tuples(m)
+        val io = (for {
+          a <- Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
+          b <- a.transpose()
+        } yield (a, b)).use {
+          case (a, b) =>
+            for {
+              init <- a.shape
+              trans <- b.shape
+            } yield {
+              assertEquals(trans, init.swap)
+            }
+        }
+
+        io.unsafeRunSync()
 
       }
     }
@@ -42,9 +92,7 @@ class CreateMatrixSpec extends ScalaCheckSuite {
       s"can be created and set to all the values ${implicitly[ClassTag[A]]}"
     ) {
       forAll { m: MatrixTuples[A] =>
-        val is = m.tuples.map(_._1).toArray
-        val js = m.tuples.map(_._2).toArray
-        val vs = m.tuples.map(_._3).toArray
+        val (is, js, vs) = tuples(m)
 
         val io = Matrix[IO, A](m.rows, m.cols)
           .use { mat =>
@@ -71,9 +119,7 @@ class CreateMatrixSpec extends ScalaCheckSuite {
 
     property("can be created with direct arrays") {
       forAll { m: MatrixTuples[A] =>
-        val is = m.tuples.map(_._1).toArray
-        val js = m.tuples.map(_._2).toArray
-        val vs = m.tuples.map(_._3).toArray
+        val (is, js, vs) = tuples(m)
 
         val io = Matrix
           .fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
@@ -135,10 +181,9 @@ trait WithDistinctBy {
   }
 }
 
-object MatrixTuples extends WithDistinctBy{
+object MatrixTuples extends WithDistinctBy {
 
-
-  def genVal[T](rows: Long, cols: Long)(g:Gen[T]): Gen[(Long, Long, T)] =
+  def genVal[T](rows: Long, cols: Long)(g: Gen[T]): Gen[(Long, Long, T)] =
     for {
       i <- Gen.choose(0, rows - 1)
       j <- Gen.choose(0, cols - 1)
@@ -172,9 +217,11 @@ case class MxMSample[T](
     c: MatrixTuples[T]
 )
 
-object MxMSample extends WithDistinctBy{
+object MxMSample extends WithDistinctBy {
 
-  implicit def mxmSampleArb[T](implicit T:Arbitrary[T]): Arbitrary[MxMSample[T]] = {
+  implicit def mxmSampleArb[T](
+      implicit T: Arbitrary[T]
+  ): Arbitrary[MxMSample[T]] = {
 
     def matTuples(rows: Int, cols: Int) =
       for {
@@ -184,7 +231,6 @@ object MxMSample extends WithDistinctBy{
           )
           .map(_.distinctBy(t => t._1 -> t._2))
       } yield MatrixTuples[T](rows, cols, vals)
-
 
     val gen = for {
       size <- Gen.posNum[Int]

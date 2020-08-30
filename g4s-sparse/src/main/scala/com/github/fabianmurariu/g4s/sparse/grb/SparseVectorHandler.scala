@@ -4,7 +4,9 @@ import java.nio.Buffer
 import com.github.fabianmurariu.unsafe.GRBCORE
 import com.github.fabianmurariu.unsafe.GRAPHBLAS
 
-trait SparseVectorHandler[@specialized(Boolean, Byte, Short, Int, Long, Float, Double) T] {
+trait SparseVectorHandler[
+    @specialized(Boolean, Byte, Short, Int, Long, Float, Double) T
+] {
   def createVector(size: Long): Buffer
 
   def createVectorFromTuples(size: Long)(is: Array[Long], vs: Array[T]): Buffer
@@ -18,9 +20,11 @@ trait SparseVectorHandler[@specialized(Boolean, Byte, Short, Int, Long, Float, D
     var i = 0
     while (i < is.length) {
       set(vec)(is(i), ts(i))
-      i+=1
+      i += 1
     }
   }
+
+  def extract(vec: Buffer): (Array[Long], Array[T])
 
   def remove(vec: Buffer)(i: Long): Unit =
     GRBCORE.removeElementVector(vec, i)
@@ -32,6 +36,14 @@ object SparseVectorHandler {
 
   implicit val booleanVectorHandler: SparseVectorHandler[Boolean] =
     new SparseVectorHandler[Boolean] {
+
+      override def extract(vec: Buffer): (Array[Long], Array[Boolean]) = {
+        val nvals = GRBCORE.nvalsVector(vec)
+        val is = new Array[Long](nvals.toInt)
+        val vs = new Array[Boolean](nvals.toInt)
+        GRAPHBLAS.extractVectorTuplesBoolean(vec, vs, is)
+        (is, vs)
+      }
 
       override def createVectorFromTuples(
           size: Long
@@ -59,6 +71,13 @@ object SparseVectorHandler {
 
   implicit val byteVectorHandler: SparseVectorHandler[Byte] =
     new SparseVectorHandler[Byte] {
+      override def extract(vec: Buffer): (Array[Long], Array[Byte]) = {
+        val nvals = GRBCORE.nvalsVector(vec)
+        val is = new Array[Long](nvals.toInt)
+        val vs = new Array[Byte](nvals.toInt)
+        GRAPHBLAS.extractVectorTuplesByte(vec, vs, is)
+        (is, vs)
+      }
 
       override def createVectorFromTuples(
           size: Long
@@ -86,6 +105,13 @@ object SparseVectorHandler {
 
   implicit val shortVectorHandler: SparseVectorHandler[Short] =
     new SparseVectorHandler[Short] {
+      override def extract(vec: Buffer): (Array[Long], Array[Short]) = {
+        val nvals = GRBCORE.nvalsVector(vec)
+        val is = new Array[Long](nvals.toInt)
+        val vs = new Array[Short](nvals.toInt)
+        GRAPHBLAS.extractVectorTuplesShort(vec, vs, is)
+        (is, vs)
+      }
       override def createVectorFromTuples(
           size: Long
       )(is: Array[Long], vs: Array[Short]): Buffer = {
@@ -111,6 +137,13 @@ object SparseVectorHandler {
 
   implicit val intVectorHandler: SparseVectorHandler[Int] =
     new SparseVectorHandler[Int] {
+      override def extract(vec: Buffer): (Array[Long], Array[Int]) = {
+        val nvals = GRBCORE.nvalsVector(vec)
+        val is = new Array[Long](nvals.toInt)
+        val vs = new Array[Int](nvals.toInt)
+        GRAPHBLAS.extractVectorTuplesInt(vec, vs, is)
+        (is, vs)
+      }
       override def createVectorFromTuples(
           size: Long
       )(is: Array[Long], vs: Array[Int]): Buffer = {
@@ -137,6 +170,13 @@ object SparseVectorHandler {
   implicit val longVectorHandler: SparseVectorHandler[Long] =
     new SparseVectorHandler[Long] {
 
+      override def extract(vec: Buffer): (Array[Long], Array[Long]) = {
+        val nvals = GRBCORE.nvalsVector(vec)
+        val is = new Array[Long](nvals.toInt)
+        val vs = new Array[Long](nvals.toInt)
+        GRAPHBLAS.extractVectorTuplesLong(vec, vs, is)
+        (is, vs)
+      }
       override def createVectorFromTuples(
           size: Long
       )(is: Array[Long], vs: Array[Long]): Buffer = {
@@ -163,6 +203,13 @@ object SparseVectorHandler {
 
   implicit val floatVectorHandler: SparseVectorHandler[Float] =
     new SparseVectorHandler[Float] {
+      override def extract(vec: Buffer): (Array[Long], Array[Float]) = {
+        val nvals = GRBCORE.nvalsVector(vec)
+        val is = new Array[Long](nvals.toInt)
+        val vs = new Array[Float](nvals.toInt)
+        GRAPHBLAS.extractVectorTuplesFloat(vec, vs, is)
+        (is, vs)
+      }
 
       override def createVectorFromTuples(
           size: Long
@@ -190,6 +237,13 @@ object SparseVectorHandler {
 
   implicit val doubleVectorHandler: SparseVectorHandler[Double] =
     new SparseVectorHandler[Double] {
+      override def extract(vec: Buffer): (Array[Long], Array[Double]) = {
+        val nvals = GRBCORE.nvalsVector(vec)
+        val is = new Array[Long](nvals.toInt)
+        val vs = new Array[Double](nvals.toInt)
+        GRAPHBLAS.extractVectorTuplesDouble(vec, vs, is)
+        (is, vs)
+      }
 
       override def createVectorFromTuples(
           size: Long

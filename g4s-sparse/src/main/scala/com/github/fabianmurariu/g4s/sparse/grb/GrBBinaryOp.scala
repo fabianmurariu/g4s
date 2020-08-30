@@ -12,11 +12,12 @@ import com.github.fabianmurariu.unsafe.GRAPHBLAS
   * used for accumulators
  */
 sealed trait GrBBinaryOp[A, B, C] {
-  private[grb] def pointer:Buffer
+  def pointer:Buffer
 }
 // some special ops can be found via implicits
-case class EqOp[A](private[grb] val pointer: Buffer) extends GrBBinaryOp[A, A, Boolean]
-case class GrBDefaultBinaryOp[A, B, C](private[grb] val pointer: Buffer) extends GrBBinaryOp[A, B, C]
+// FIXME: pointer needs to be private
+case class EqOp[A](val pointer: Buffer) extends GrBBinaryOp[A, A, Boolean]
+case class GrBDefaultBinaryOp[A, B, C](val pointer: Buffer) extends GrBBinaryOp[A, B, C]
 
 /**
   * Default BinaryOps (T, T) -> T

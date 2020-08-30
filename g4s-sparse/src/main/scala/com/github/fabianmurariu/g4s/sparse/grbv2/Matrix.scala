@@ -24,6 +24,10 @@ import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
+import com.github.fabianmurariu.unsafe.GRBOPSMAT
+import com.github.fabianmurariu.g4s.sparse.grb.SparseVectorHandler
+import com.github.fabianmurariu.g4s.sparse.grb.GrBDescriptor
+import com.github.fabianmurariu.g4s.sparse.grb.GrBError
 
 trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
     extends BaseMatrix[F] { self =>
@@ -58,6 +62,47 @@ trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
     H.extractTuples(mp.ref)
   }
 
+  def reduce(
+      op: GrBBinaryOp[A, A, A]
+  )(
+      implicit SVH: SparseVectorHandler[A],
+      S: Sync[F]
+  ): Resource[F, SprVector[F, A]] =
+    (for {
+      r <- Resource.liftF(self.nrows)
+      v <- SprVector[F, A](r)
+    } yield v).evalMap[F, SprVector[F, A]] { vec =>
+      for {
+        v <- vec.pointer
+        m <- self.pointer
+        _ <- S.delay {
+          GRBOPSMAT.matrixReduceBinOp(
+            v.ref,
+            null,
+            null,
+            op.pointer,
+            m.ref,
+            null
+          )
+        }
+      } yield vec
+    }
+
+  def transpose[X](
+      mask: Option[Matrix[F, X]] = None,
+      accum: Option[GrBBinaryOp[A, A, A]] = None,
+      desc: Option[GrBDescriptor] = None
+  )(implicit S: Sync[F]): Resource[F, Matrix[F, A]] = {
+    implicit val H: SparseMatrixHandler[A] = self.H
+    for {
+      shape <- Resource.liftF(self.shape)
+      c <- Matrix[F, A](shape._2, shape._1)
+      _ <- Resource.liftF(
+        MatrixOps.transpose[F, A, A, A, X](c)(mask, accum, desc)(self)
+      )
+    } yield c
+  }
+
   def reduce(init: A, monoid: GrBMonoid[A])(implicit R: Reduce[A]): F[A] =
     self.pointer.map { p => R.reduceAll(p.ref)(init, monoid) }
 
@@ -66,11 +111,11 @@ trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
   )(implicit R: Reduce[A], N: Numeric[A]): F[A] =
     reduce(N.zero, monoid)
 
-  def isAll(
+  def isAll( // TODO: move this into separate MatrixOps
       other: Matrix[F, A]
   )(op: GrBBinaryOp[A, A, Boolean])(implicit S: Sync[F]): F[Boolean] = {
 
-    def eqEither[T](s1: T, s2: T)(msg:String): EitherT[F, String, Boolean] =
+    def eqEither[T](s1: T, s2: T)(msg: String): EitherT[F, String, Boolean] =
       if (s1 == s2) EitherT.fromEither(Right(true))
       else EitherT.fromEither(Left(msg))
 
@@ -89,7 +134,9 @@ trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
               ElemWise[F].intersect(m)(Left(op))(self, other)
             )
             nvals <- EitherT.right(inter.nvals)
-            _ <- eqEither(expectedNVals, nvals)(s"different nvals after intersect $expectedNVals != $nvals")
+            _ <- eqEither(expectedNVals, nvals)(
+              s"different nvals after intersect $expectedNVals != $nvals"
+            )
             check <- EitherT.right(inter.reduce(true, land))
             out <- eqEither(true, check)("different values")
           } yield out
@@ -154,7 +201,7 @@ trait BaseMatrix[F[_]] { self =>
     for {
       n <- ncols
       r <- nrows
-    } yield (n, r)
+    } yield (r, n)
 
   def nvals: F[Long] = pointer.map { mp => GRBCORE.nvalsMatrix(mp.ref) }
 
@@ -186,14 +233,14 @@ object Matrix {
 
   def csc[F[_], A](rows: Long, cols: Long)(
       implicit M: Sync[F],
-      SMH: SparseMatrixHandler[A],
+      SMH: SparseMatrixHandler[A]
   ) = apply[F, A](rows, cols).evalMap {
     _.pointer.map(p => GRBCORE.makeCSC(p.ref))
   }
 
   def apply[F[_], A](rows: Long, cols: Long)(
       implicit M: Sync[F],
-      SMH: SparseMatrixHandler[A],
+      SMH: SparseMatrixHandler[A]
   ): Resource[F, Matrix[F, A]] = {
     Resource
       .fromAutoCloseable(
@@ -216,7 +263,7 @@ object Matrix {
       cols: Long
   )(is: Array[Long], js: Array[Long], vs: Array[A])(
       implicit M: Sync[F],
-      SMH: SparseMatrixHandler[A],
+      SMH: SparseMatrixHandler[A]
   ): Resource[F, Matrix[F, A]] = {
     Resource
       .fromAutoCloseable(

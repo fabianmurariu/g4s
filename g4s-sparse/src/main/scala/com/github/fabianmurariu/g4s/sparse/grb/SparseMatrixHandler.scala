@@ -47,7 +47,7 @@ object SparseMatrixHandler {
       val vs = new Array[Boolean](nvals.toInt)
       val is = new Array[Long](nvals.toInt)
       val js = new Array[Long](nvals.toInt)
-      GRAPHBLAS.extractMatrixTuplesBoolean(mat, vs, is, js)
+      GrBError.check(GRAPHBLAS.extractMatrixTuplesBoolean(mat, vs, is, js))
       (is, js, vs)
     }
 
@@ -56,7 +56,8 @@ object SparseMatrixHandler {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
       val mat:Buffer = createMatrix(rows, cols)
-      GRAPHBLAS.buildMatrixFromTuplesBoolean(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpBoolean())
+      GrBError.check(
+        GRAPHBLAS.buildMatrixFromTuplesBoolean(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpBoolean()))
       mat
     }
   }
@@ -66,14 +67,14 @@ object SparseMatrixHandler {
 
     def get(mat: Buffer)(i: Long, j: Long): Array[Byte] = GRAPHBLAS.getMatrixElementByte(mat, i, j)
 
-    def set(mat: Buffer)(i: Long, j: Long, t: Byte): Unit = GRAPHBLAS.setMatrixElementByte(mat, i, j, t)
+    def set(mat: Buffer)(i: Long, j: Long, t: Byte): Unit = GrBError.check(GRAPHBLAS.setMatrixElementByte(mat, i, j, t))
 
     override def extractTuples(mat: Buffer) = {
       val nvals = GRBCORE.nvalsMatrix(mat)
       val vs = new Array[Byte](nvals.toInt)
       val is = new Array[Long](nvals.toInt)
       val js = new Array[Long](nvals.toInt)
-      GRAPHBLAS.extractMatrixTuplesByte(mat, vs, is, js)
+      GrBError.check(GRAPHBLAS.extractMatrixTuplesByte(mat, vs, is, js))
       (is, js, vs)
     }
 
@@ -82,7 +83,7 @@ object SparseMatrixHandler {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
       val mat:Buffer = createMatrix(rows, cols)
-      GRAPHBLAS.buildMatrixFromTuplesByte(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpByte())
+      GrBError.check(GRAPHBLAS.buildMatrixFromTuplesByte(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpByte()))
       mat
     }
 
@@ -93,14 +94,14 @@ object SparseMatrixHandler {
 
     def get(mat: Buffer)(i: Long, j: Long): Array[Short] = GRAPHBLAS.getMatrixElementShort(mat, i, j)
 
-    def set(mat: Buffer)(i: Long, j: Long, t: Short): Unit = GRAPHBLAS.setMatrixElementShort(mat, i, j, t)
+    def set(mat: Buffer)(i: Long, j: Long, t: Short): Unit = GrBError.check(GRAPHBLAS.setMatrixElementShort(mat, i, j, t))
 
     override def extractTuples(mat: Buffer)= {
       val nvals = GRBCORE.nvalsMatrix(mat)
       val vs = new Array[Short](nvals.toInt)
       val is = new Array[Long](nvals.toInt)
       val js = new Array[Long](nvals.toInt)
-      GRAPHBLAS.extractMatrixTuplesShort(mat, vs, is, js)
+      GrBError.check(GRAPHBLAS.extractMatrixTuplesShort(mat, vs, is, js))
       (is, js, vs)
     }
 
@@ -110,7 +111,7 @@ object SparseMatrixHandler {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
       val mat:Buffer = createMatrix(rows, cols)
-      GRAPHBLAS.buildMatrixFromTuplesShort(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpShort())
+      GrBError.check(GRAPHBLAS.buildMatrixFromTuplesShort(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpShort()))
       mat
     }
   }
@@ -120,14 +121,14 @@ object SparseMatrixHandler {
 
     def get(mat: Buffer)(i: Long, j: Long): Array[Int] = GRAPHBLAS.getMatrixElementInt(mat, i, j)
 
-    def set(mat: Buffer)(i: Long, j: Long, t: Int): Unit = GRAPHBLAS.setMatrixElementInt(mat, i, j, t)
+    def set(mat: Buffer)(i: Long, j: Long, t: Int): Unit = GrBError.check(GRAPHBLAS.setMatrixElementInt(mat, i, j, t))
 
     override def extractTuples(mat: Buffer)= {
       val nvals = GRBCORE.nvalsMatrix(mat)
       val vs = new Array[Int](nvals.toInt)
       val is = new Array[Long](nvals.toInt)
       val js = new Array[Long](nvals.toInt)
-      GRAPHBLAS.extractMatrixTuplesInt(mat, vs, is, js)
+      GrBError.check(GRAPHBLAS.extractMatrixTuplesInt(mat, vs, is, js))
       (is, js, vs)
     }
 
@@ -137,7 +138,7 @@ object SparseMatrixHandler {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
       val mat:Buffer = createMatrix(rows, cols)
-      GRAPHBLAS.buildMatrixFromTuplesInt(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpInt())
+      GrBError.check(GRAPHBLAS.buildMatrixFromTuplesInt(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpInt()))
       mat
     }
   }
@@ -147,14 +148,14 @@ object SparseMatrixHandler {
 
     def get(mat: Buffer)(i: Long, j: Long): Array[Long] = GRAPHBLAS.getMatrixElementLong(mat, i, j)
 
-    def set(mat: Buffer)(i: Long, j: Long, t: Long): Unit = GRAPHBLAS.setMatrixElementLong(mat, i, j, t)
+    def set(mat: Buffer)(i: Long, j: Long, t: Long): Unit = GrBError.check(GRAPHBLAS.setMatrixElementLong(mat, i, j, t))
 
     override def extractTuples(mat: Buffer)= {
       val nvals = GRBCORE.nvalsMatrix(mat)
       val vs = new Array[Long](nvals.toInt)
       val is = new Array[Long](nvals.toInt)
       val js = new Array[Long](nvals.toInt)
-      GRAPHBLAS.extractMatrixTuplesLong(mat, vs, is, js)
+      GrBError.check(GRAPHBLAS.extractMatrixTuplesLong(mat, vs, is, js))
       (is, js, vs)
     }
 
@@ -164,7 +165,7 @@ object SparseMatrixHandler {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
       val mat:Buffer = createMatrix(rows, cols)
-      GRAPHBLAS.buildMatrixFromTuplesLong(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpLong())
+      GrBError.check(GRAPHBLAS.buildMatrixFromTuplesLong(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpLong()))
       mat
     }
   }
@@ -174,14 +175,14 @@ object SparseMatrixHandler {
 
     def get(mat: Buffer)(i: Long, j: Long): Array[Float] = GRAPHBLAS.getMatrixElementFloat(mat, i, j)
 
-    def set(mat: Buffer)(i: Long, j: Long, t: Float): Unit = GRAPHBLAS.setMatrixElementFloat(mat, i, j, t)
+    def set(mat: Buffer)(i: Long, j: Long, t: Float): Unit = GrBError.check(GRAPHBLAS.setMatrixElementFloat(mat, i, j, t))
 
     override def extractTuples(mat: Buffer)= {
       val nvals = GRBCORE.nvalsMatrix(mat)
       val vs = new Array[Float](nvals.toInt)
       val is = new Array[Long](nvals.toInt)
       val js = new Array[Long](nvals.toInt)
-      GRAPHBLAS.extractMatrixTuplesFloat(mat, vs, is, js)
+      GrBError.check(GRAPHBLAS.extractMatrixTuplesFloat(mat, vs, is, js))
       (is, js, vs)
     }
 
@@ -191,7 +192,7 @@ object SparseMatrixHandler {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
       val mat:Buffer = createMatrix(rows, cols)
-      GRAPHBLAS.buildMatrixFromTuplesFloat(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpFloat())
+      GrBError.check(GRAPHBLAS.buildMatrixFromTuplesFloat(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpFloat()))
       mat
     }
   }
@@ -201,14 +202,14 @@ object SparseMatrixHandler {
 
     def get(mat: Buffer)(i: Long, j: Long): Array[Double] = GRAPHBLAS.getMatrixElementDouble(mat, i, j)
 
-    def set(mat: Buffer)(i: Long, j: Long, t: Double): Unit = GRAPHBLAS.setMatrixElementDouble(mat, i, j, t)
+    def set(mat: Buffer)(i: Long, j: Long, t: Double): Unit = GrBError.check(GRAPHBLAS.setMatrixElementDouble(mat, i, j, t))
 
     override def extractTuples(mat: Buffer)= {
       val nvals = GRBCORE.nvalsMatrix(mat)
       val vs = new Array[Double](nvals.toInt)
       val is = new Array[Long](nvals.toInt)
       val js = new Array[Long](nvals.toInt)
-      GRAPHBLAS.extractMatrixTuplesDouble(mat, vs, is, js)
+      GrBError.check(GRAPHBLAS.extractMatrixTuplesDouble(mat, vs, is, js))
       (is, js, vs)
     }
 
@@ -218,7 +219,7 @@ object SparseMatrixHandler {
       val nvals = is.length
       assert(is.length == js.length && js.length == vs.length)
       val mat:Buffer = createMatrix(rows, cols)
-      GRAPHBLAS.buildMatrixFromTuplesDouble(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpDouble())
+      GrBError.check(GRAPHBLAS.buildMatrixFromTuplesDouble(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpDouble()))
       mat
     }
   }
