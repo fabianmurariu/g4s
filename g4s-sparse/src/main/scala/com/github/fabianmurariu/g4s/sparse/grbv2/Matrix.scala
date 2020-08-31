@@ -104,14 +104,20 @@ trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
   }
 
 
-  def extract[X](is:GrBRange, js:GrBRange)(from: Matrix[F, A],
+  def apply[R1:GrBRangeLike, R2:GrBRangeLike](isRange:R1, jsRange:R2): MatrixSelection[F, A] = {
+    val (ni, is) = GrBRangeLike[R1].toGrB(isRange)
+    val (nj, js) = GrBRangeLike[R2].toGrB(jsRange)
+    new MatrixSelection(self, is, ni, js, nj)
+  }
+
+  def set[X](from: MatrixSelection[F, A],
       mask: Option[Matrix[F, X]] = None,
       accum: Option[GrBBinaryOp[A, A, A]] = None,
       desc: Option[GrBDescriptor] = None
   )(implicit S: Sync[F]): F[Matrix[F, A]] = {
 
     implicit val H: SparseMatrixHandler[A] = self.H
-    MatrixOps.assign(self)(from, is, js)(mask, accum, desc)
+    MatrixOps.extract(self)(from)(mask, accum, desc)
   }
 
   def reduce(init: A, monoid: GrBMonoid[A])(implicit R: Reduce[A]): F[A] =

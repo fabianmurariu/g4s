@@ -9,7 +9,7 @@ import com.github.fabianmurariu.unsafe.GRBOPSMAT
 import cats.Monad
 import com.github.fabianmurariu.g4s.sparse.grb.SparseMatrixHandler
 
-object MatrixOps extends TransposeOps with AssignOps
+object MatrixOps extends TransposeOps with ExtractOps
 
 trait TransposeOps {
 
@@ -44,33 +44,31 @@ trait TransposeOps {
     }
 }
 
-trait AssignOps {
-  def assign[F[_], A, B, C, X](to: Matrix[F, A])(
-      from: Matrix[F, A],
-      is: GrBRange,
-      js: GrBRange
-  )(
+trait ExtractOps {
+  // to = from(I, J)
+
+  def extract[F[_], A, B, C, X](
+      to: Matrix[F, A]
+  )(from: MatrixSelection[F, A])(
       mask: Option[Matrix[F, X]] = None,
       accum: Option[GrBBinaryOp[A, B, C]] = None,
       desc: Option[GrBDescriptor] = None
   )(implicit S: Sync[F], SMH: SparseMatrixHandler[C]): F[Matrix[F, C]] =
     for {
-      mpIn <- from.pointer
+      mpIn <- from.mat.pointer
       mpOut <- to.pointer
       grbMask <- mask.map(_.pointer.map(_.ref)).getOrElse(S.pure(null))
       _ <- S.delay {
-        val (ni, grbI) = GrBRange.toGrB(is)
-        val (nj, grbJ) = GrBRange.toGrB(js)
         GrBError.check(
           GRBOPSMAT.extract(
             mpOut.ref,
             grbMask,
             accum.map(_.pointer).orNull,
             mpIn.ref,
-            grbI,
-            ni,
-            grbJ,
-            nj,
+            from.is,
+            from.ni,
+            from.js,
+            from.nj,
             desc.map(_.pointer).orNull
           )
         )
@@ -85,4 +83,41 @@ trait AssignOps {
 
     }
 
+
+  // to(I, J) = from
+  def assign[F[_], A, B, C, X](
+      to: MatrixSelection[F, A]
+  )(from: Matrix[F, A])(
+      mask: Option[Matrix[F, X]] = None,
+      accum: Option[GrBBinaryOp[A, B, C]] = None,
+      desc: Option[GrBDescriptor] = None
+  )(implicit S: Sync[F], SMH: SparseMatrixHandler[C]): F[Matrix[F, C]] =
+    for {
+      mpIn <- from.pointer
+      mpOut <- to.mat.pointer
+      grbMask <- mask.map(_.pointer.map(_.ref)).getOrElse(S.pure(null))
+      _ <- S.delay {
+        GrBError.check(
+          GRBOPSMAT.assign(
+            mpOut.ref,
+            grbMask,
+            accum.map(_.pointer).orNull,
+            mpIn.ref,
+            to.is,
+            to.ni,
+            to.js,
+            to.nj,
+            desc.map(_.pointer).orNull
+          )
+        )
+      }
+    } yield new Matrix[F, C] {
+
+      override def pointer: F[Pointer] = S.pure(mpOut)
+
+      override def F: Monad[F] = S
+
+      override def H: SparseMatrixHandler[C] = SMH
+
+    }
 }

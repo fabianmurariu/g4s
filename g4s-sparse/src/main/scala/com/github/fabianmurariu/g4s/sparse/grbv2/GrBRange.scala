@@ -2,7 +2,14 @@ package com.github.fabianmurariu.g4s.sparse.grbv2
 
 import com.github.fabianmurariu.unsafe.GRBCORE
 
-case class GrBRange(start: Long, end: Long, inc: Long = 1L)
+sealed trait GrBRange
+
+case class All(n:Long) extends GrBRange
+case class Index(is:Array[Long]) extends GrBRange
+case class IndexRange(start: Long, end: Long, inc: Long = 1L) extends GrBRange
+
+
+
 
 object GrBRange {
 
@@ -10,14 +17,14 @@ object GrBRange {
     require(r.start >= 0  && r.end >= 0 && r.step != 0)
     r.isInclusive match {
     case true =>
-      GrBRange(r.start, r.end, r.step) // GrBRanges are always exclusive
+      IndexRange(r.start, r.end, r.step) // GrBRanges are always exclusive
     case false =>
-      GrBRange(r.start, r.end -1 , r.step)
+      IndexRange(r.start, r.end -1 , r.step)
     }
   }
 
 
-  def toGrB(r: GrBRange):(Long, Array[Long]) = {
+  def indexRangeToGrB(r: IndexRange):(Long, Array[Long]) = {
 
     r.inc match {
       case 1 =>
@@ -36,4 +43,32 @@ object GrBRange {
   }
 
   implicit def rangIsGrBRange(r:Range):GrBRange = apply(r)
+}
+
+trait GrBRangeLike[R] {
+  def toGrB(r:R):(Long, Array[Long])
+}
+
+object GrBRangeLike {
+
+
+  def apply[R](implicit G:GrBRangeLike[R]):GrBRangeLike[R] = G
+
+  implicit val grbRange:GrBRangeLike[GrBRange] = new GrBRangeLike[GrBRange] {
+
+    override def toGrB(r: GrBRange): (Long, Array[Long]) = r match {
+      case ir:IndexRange => GrBRange.indexRangeToGrB(ir)
+      case Index(is) => (is.length, is)
+      case All(n) => (n, Array[Long](Long.MinValue))
+    }
+
+  }
+
+  implicit val scalaRange:GrBRangeLike[Range] = new GrBRangeLike[Range] {
+
+    override def toGrB(r: Range): (Long, Array[Long]) =
+      GrBRangeLike[GrBRange].toGrB(GrBRange(r))
+
+  }
+
 }

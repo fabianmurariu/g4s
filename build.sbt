@@ -1,7 +1,7 @@
 ThisBuild / scalaVersion := "2.12.11"
 ThisBuild / organization := "com.github.fabianmurariu"
 
-val grbVersion = "0.1.14"
+val grbVersion = "0.1.15"
 
 lazy val commonSettings = Seq(
   scalacOptions += "-Ypartial-unification",
