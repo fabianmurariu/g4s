@@ -1,6 +1,5 @@
 package com.github.fabianmurariu.g4s.sparse.grb
 import java.nio.Buffer
-import com.github.fabianmurariu.unsafe.GRAPHBLAS
 import com.github.fabianmurariu.unsafe.GRBMONOID
 import com.github.fabianmurariu.unsafe.GRBCORE
 import cats.effect.Resource

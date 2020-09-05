@@ -6,7 +6,6 @@ import cats.effect.Sync
 import cats.implicits._
 import com.github.fabianmurariu.g4s.sparse.grb.GrBError
 import com.github.fabianmurariu.unsafe.GRBOPSMAT
-import cats.Monad
 import com.github.fabianmurariu.g4s.sparse.grb.SparseMatrixHandler
 
 object MatrixOps extends TransposeOps with ExtractOps
@@ -33,15 +32,8 @@ trait TransposeOps {
           )
         )
       }
-    } yield new Matrix[F, C] {
-
-      override def pointer: F[Pointer] = S.pure(mpOut)
-
-      override def F: Monad[F] = S
-
-      override def H: SparseMatrixHandler[C] = SMH
-
-    }
+    } yield new DefaultMatrix(S.pure(mpOut), S, SMH)
+    
 }
 
 trait ExtractOps {
@@ -73,15 +65,7 @@ trait ExtractOps {
           )
         )
       }
-    } yield new Matrix[F, C] {
-
-      override def pointer: F[Pointer] = S.pure(mpOut)
-
-      override def F: Monad[F] = S
-
-      override def H: SparseMatrixHandler[C] = SMH
-
-    }
+    } yield new DefaultMatrix(S.pure(mpOut), S, SMH)
 
 
   // to(I, J) = from
@@ -111,13 +95,6 @@ trait ExtractOps {
           )
         )
       }
-    } yield new Matrix[F, C] {
-
-      override def pointer: F[Pointer] = S.pure(mpOut)
-
-      override def F: Monad[F] = S
-
-      override def H: SparseMatrixHandler[C] = SMH
-
-    }
+    } yield new DefaultMatrix(S.pure(mpOut), S, SMH)
+   
 }

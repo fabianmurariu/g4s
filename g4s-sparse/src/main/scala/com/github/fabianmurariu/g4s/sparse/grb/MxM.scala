@@ -4,7 +4,6 @@ import cats.implicits._
 
 import com.github.fabianmurariu.g4s.sparse.grbv2.Matrix
 import com.github.fabianmurariu.unsafe.GRBOPSMAT
-import simulacrum.typeclass
 import cats.effect.Sync
 
 trait MxM[F[_]] {

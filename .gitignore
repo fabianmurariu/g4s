@@ -8,3 +8,4 @@ build
 target
 .bloop
 .metals
+metals.sbt

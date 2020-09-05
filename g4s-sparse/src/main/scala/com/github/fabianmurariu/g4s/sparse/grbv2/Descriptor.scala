@@ -7,7 +7,6 @@ import cats.effect.Sync
 import cats.effect.Resource
 import cats.implicits._
 import com.github.fabianmurariu.g4s.sparse.grb.{grb, GrBError}
-import scala.reflect.runtime.universe._
 
 trait Descriptor[F[_]] {
   def pointer: F[GrBDescriptor]

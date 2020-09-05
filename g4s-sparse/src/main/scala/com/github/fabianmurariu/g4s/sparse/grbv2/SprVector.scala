@@ -1,6 +1,5 @@
 package com.github.fabianmurariu.g4s.sparse.grbv2
 
-import java.nio.Buffer
 
 import scala.{specialized => sp}
 import cats.effect.{Sync, Resource}

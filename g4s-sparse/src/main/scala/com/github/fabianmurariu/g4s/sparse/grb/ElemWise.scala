@@ -1,12 +1,9 @@
 package com.github.fabianmurariu.g4s.sparse.grb
 
-import com.github.fabianmurariu.unsafe.GRBALG
-import com.github.fabianmurariu.unsafe.GRBCORE
 import com.github.fabianmurariu.unsafe.GRBOPSMAT
 import com.github.fabianmurariu.g4s.sparse.grbv2.Matrix
 import cats.implicits._
 import cats.effect.Sync
-import simulacrum.typeclass
 
 trait ElemWise[F[_]] {
 
@@ -21,7 +18,7 @@ trait ElemWise[F[_]] {
     for {
       c <- into.pointer
       a <- fa.pointer
-      b <- fa.pointer
+      b <- fb.pointer
       m <- mask.map(_.pointer.map(_.ref)).getOrElse(F.pure(null))
       _ <- F.delay {
       add match {
@@ -64,7 +61,7 @@ trait ElemWise[F[_]] {
     for {
       c <- into.pointer
       a <- fa.pointer
-      b <- fa.pointer
+      b <- fb.pointer
       m <- mask.map(_.pointer.map(_.ref)).getOrElse(F.pure(null))
       _ <- F.delay {
       add match {

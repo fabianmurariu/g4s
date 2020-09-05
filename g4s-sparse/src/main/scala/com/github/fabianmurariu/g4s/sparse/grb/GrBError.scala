@@ -1,6 +1,5 @@
 package com.github.fabianmurariu.g4s.sparse.grb
 
-import com.github.fabianmurariu.unsafe.GRBCORE
 
 sealed abstract class GrBError(val code: Long, message: String)
     extends RuntimeException(message) {
@@ -48,7 +47,7 @@ class InvalidErrorCode(val badCode:Long) extends GrBError(-1, "Malformed error, 
 
 object GrBError {
 
-  def check(code:Long):Long = code match {
+  def check(code:Long):Unit = code match {
     case 0 | 1 => code
     case err => throw GrBError(err)
   }
