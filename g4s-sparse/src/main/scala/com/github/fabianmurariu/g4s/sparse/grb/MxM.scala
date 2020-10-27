@@ -8,12 +8,12 @@ import cats.effect.Sync
 
 trait MxM[F[_]] {
 
-  def mxm[A, B, C, X](into: Matrix[F, C])(
+  def mxm[A, B, C, X](into: Matrix[F, C])(fa: Matrix[F, A], fb: Matrix[F, B])(
       semiring: GrBSemiring[A, B, C],
       mask: Option[Matrix[F, X]] = None,
       accum: Option[GrBBinaryOp[C, C, C]] = None,
       desc: Option[GrBDescriptor] = None
-  )(fa: Matrix[F, A], fb: Matrix[F, B])(
+  )(
       implicit F: Sync[F]
   ): F[Matrix[F, C]] = {
 
@@ -23,7 +23,7 @@ trait MxM[F[_]] {
       b <- fb.pointer
       m <- mask.map(_.pointer.map(_.ref)).getOrElse(F.pure(null))
       _ <- Sync[F].delay {
-        val res = GRBOPSMAT.mxm(
+        GrBError.check(GRBOPSMAT.mxm(
           c.ref,
           m,
           accum.map(_.pointer).orNull,
@@ -31,17 +31,16 @@ trait MxM[F[_]] {
           a.ref,
           b.ref,
           desc.map(_.pointer).orNull
-        )
-        assert(res == 0)
+        ))
       }
     } yield into
   }
 
 }
 
-object MxM{
+object MxM {
 
-  def apply[F[_]](implicit M:MxM[F]) = M
+  def apply[F[_]](implicit M: MxM[F]) = M
 
-  implicit def mxmInstance[F[_]]:MxM[F] = new MxM[F]{}
+  implicit def mxmInstance[F[_]]: MxM[F] = new MxM[F] {}
 }

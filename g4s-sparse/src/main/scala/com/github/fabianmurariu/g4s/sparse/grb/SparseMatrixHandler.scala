@@ -54,7 +54,7 @@ object SparseMatrixHandler {
     override def createMatrixFromTuples(rows:Long, cols:Long)
                              (is: Array[Long], js: Array[Long], vs: Array[Boolean]): Buffer = {
       val nvals = is.length
-      assert(is.length == js.length && js.length == vs.length)
+      assert(is.length == js.length && js.length == vs.length, "is, js, vs must have the same length")
       val mat:Buffer = createMatrix(rows, cols)
       GrBError.check(
         GRAPHBLAS.buildMatrixFromTuplesBoolean(mat, is, js, vs, nvals, GRAPHBLAS.firstBinaryOpBoolean()))

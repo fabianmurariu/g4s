@@ -200,10 +200,11 @@ sealed trait Matrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double) A]
       n <- nvals
     } yield vals match {
       case (is, js, vs) =>
+        val extraItems = if (limit >= n) "" else " .. "
         (Stream(is: _*), Stream(js: _*), Stream(vs: _*)).zipped
           .take(limit)
           .map { case (i, j, v) => s"($i,$j):$v" }
-          .mkString(s"[$n ${s._1}x${s._2}:$CT {", ",", " .. }]")
+          .mkString(s"[nvals=$n ${s._1}x${s._2}:$CT {", ", ", s"$extraItems}]")
     }
 
 }

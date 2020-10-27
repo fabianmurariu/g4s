@@ -61,7 +61,7 @@ lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("munit.Framework"),
   coverageEnabled := true,
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-effect" % "2.2.0-RC3",
+    "org.typelevel" %% "cats-effect" % "2.2.0",
     "com.github.mpilquist" %% "simulacrum" % "0.19.0",
     "co.fs2" %% "fs2-core" % "2.4.4",
     "org.scalameta" %% "munit" % "0.7.11" % Test,
@@ -75,8 +75,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val g4s = (project in file("."))
-  .aggregate(g4sSparse)
-  .dependsOn(g4sSparse)
+  .aggregate(g4sSparse, g4sMatrixGraph, docs)
   .settings(
     name := "g4s"
   )
@@ -101,6 +100,16 @@ lazy val docs = project       // new documentation project
    )
   )
 
+lazy val g4sMatrixGraph = (project in file("g4s-matrix-graph"))
+  .enablePlugins(MUnitReportPlugin)
+  .dependsOn(g4sSparse)
+  .settings(
+    commonSettings,
+    name := "g4s-matrix-graph",
+  libraryDependencies ++= Seq(
+    "org.typelevel" %% "cats-free" % "2.2.0"
+    )
+  )
 // lazy val g4sGraph = (project in file("g4s-graph"))
 //   .aggregate(g4sSparse)
 //   .dependsOn(g4sSparse)

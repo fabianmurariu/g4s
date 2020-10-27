@@ -8,8 +8,6 @@ import com.github.fabianmurariu.g4s.sparse.grb.{SparseMatrixHandler}
 import scala.concurrent.ExecutionContext
 import cats.effect.IO
 import munit.ScalaCheckSuite
-import scala.collection.immutable.{Vector => SVector}
-import com.github.fabianmurariu.g4s.sparse.grb.ElemWise
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
@@ -47,11 +45,11 @@ class MxMSpec extends ScalaCheckSuite {
                 _ <- mb.set(mt.b.tuples)
                 _ <- mc.set(mt.c.tuples)
                 // left = (A*B)*C
-                _ <- MxM[IO].mxm(left)(semiR)(ma, mb)
-                _ <- MxM[IO].mxm(left)(semiR)(left, mc)
+                _ <- MxM[IO].mxm(left)(ma, mb)(semiR)
+                _ <- MxM[IO].mxm(left)(left, mc)(semiR)
                 // right = A*(B*C)
-                _ <- MxM[IO].mxm(right)(semiR)(mb, mc)
-                _ <- MxM[IO].mxm(right)(semiR)(ma, right)
+                _ <- MxM[IO].mxm(right)(mb, mc)(semiR)
+                _ <- MxM[IO].mxm(right)(ma, right)(semiR)
                 check <- left.isEq(right)
               } yield check
           }

@@ -15,6 +15,7 @@ final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T) extends Auto
 }
 
 object GrBMonoid {
+
   def apply[F[_]:Sync, T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T) =
     Resource.fromAutoCloseable(
       Sync[F].delay{
