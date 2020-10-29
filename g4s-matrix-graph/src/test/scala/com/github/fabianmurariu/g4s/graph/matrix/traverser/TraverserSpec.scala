@@ -9,7 +9,6 @@ import cats.effect.Sync
 // AST for matrix operations before executing the actual GRB ops
 import cats.implicits._
 import cats.effect.Resource
-import cats.effect.IO
 
 trait GraphMatrixOp { self =>
   def algStr: String = self match {
@@ -117,7 +116,7 @@ object ShmukGraph {
     } yield g
 }
 
-sealed class Ref { self =>
+sealed abstract class Ref { self =>
   private def shortName(s: String) = s.split("\\.").last
   override def toString(): String = self match {
     case NodeRef(name)           => s"(${shortName(name)})"
@@ -227,23 +226,6 @@ object Traverser {
       out
     }
 
-    // def walkPathsV2(v: NodeRef): List[List[EdgeRef]] = {
-    //   var edgeFrontier: List[Path[EdgeRef]] = neighbours(v)
-    //     .map(edge => Path(List(edge), Set(edge), v))
-    //     .toList
-
-    //   edgeFrontier.flatMap {
-    //     case Path(path @ (e :: _), seen, orig) =>
-    //       val (origNode, children) = if (e.src == orig) {
-    //         e.dst -> neighbours(e.dst)
-    //       } else { e.src -> neighbours(e.src) }
-
-    //       children.filterNot(seen).map { childEdge =>
-    //         Path(childEdge :: path, seen + childEdge, origNode)
-    //       }
-    //   }.map(_.path)
-    // }
-
     /**
       * Starting from a node find all paths in the Query graph
       * return them as q Queue of edges
@@ -264,6 +246,7 @@ object Traverser {
           out += path
           paths = rest
         } else {
+     // FIXME: this part kinds sucks
           val newPaths = children.map { c =>
             seen += c
             path.enqueue(c)
@@ -341,6 +324,7 @@ class Bv extends Vertex
 class Cv extends Vertex
 class Dv extends Vertex
 class Ev extends Vertex
+class Fv extends Vertex
 
 sealed trait Relation
 class X extends Relation
@@ -506,6 +490,36 @@ class TraverserSpec extends munit.FunSuite {
 //
 //    assertEquals(actual1, expected1)
 //  }
+
+  test("find the longest path 4 nodes long") {
+
+    val query = for {
+      a <- node[Av]
+      b <- node[Bv]
+      c <- node[Cv]
+      d <- node[Dv]
+      e <- node[Ev]
+      f <- node[Fv]
+      _ <- edge[X](a, b)
+      _ <- edge[X](b, c)
+      _ <- edge[X](c, d)
+      _ <- edge[X](d, e)
+      _ <- edge[Y](f, c)
+    } yield ()
+
+    val qg = query.runS(emptyQG).value
+    val longestPath = qg.longestPath.toSet
+
+    val expectedLongestPath = Set(
+      EdgeRef(xTag, NodeRef(bTag), NodeRef(cTag)),
+      EdgeRef(xTag, NodeRef(cTag), NodeRef(dTag)),
+      EdgeRef(xTag, NodeRef(dTag), NodeRef(eTag)),
+      EdgeRef(xTag, NodeRef(aTag), NodeRef(bTag))
+    )
+
+    assertEquals(longestPath.size, 4)
+    assertEquals(longestPath, expectedLongestPath)
+  }
 
   test("find the longest path of a graph disjoint") {
 
