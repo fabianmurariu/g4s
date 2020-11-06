@@ -261,7 +261,7 @@ object Matrix {
   def csc[F[_], A](rows: Long, cols: Long)(
       implicit M: Sync[F],
       SMH: SparseMatrixHandler[A]
-  ) = apply[F, A](rows, cols).evalMap {
+  ): Resource[F, Long] = apply[F, A](rows, cols).evalMap {
     _.pointer.map(p => GRBCORE.makeCSC(p.ref))
   }
 
