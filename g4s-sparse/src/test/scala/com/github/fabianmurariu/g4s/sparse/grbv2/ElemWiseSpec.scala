@@ -13,6 +13,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.ElemWise
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
+import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
 class ElemWiseSpec extends ScalaCheckSuite {
   implicit val ec = ExecutionContext.global
@@ -26,9 +27,9 @@ class ElemWiseSpec extends ScalaCheckSuite {
     ) {
       forAll { mt: MatrixTuples[A] =>
         val rM1M2 = for {
-          m1 <- Matrix[IO, A](mt.rows, mt.cols)
-          m2 <- Matrix[IO, A](mt.rows, mt.cols)
-          into <- Matrix[IO, A](mt.rows, mt.cols)
+          m1 <- GrBMatrix[IO, A](mt.rows, mt.cols)
+          m2 <- GrBMatrix[IO, A](mt.rows, mt.cols)
+          into <- GrBMatrix[IO, A](mt.rows, mt.cols)
         } yield (m1, m2, into)
 
         val io = rM1M2

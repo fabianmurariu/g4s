@@ -1,6 +1,7 @@
 package com.github.fabianmurariu.g4s.sparse.grbv2
 
 import cats.effect.IO
+import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
 class DescriptorSpec extends munit.FunSuite {
 

@@ -1,7 +1,7 @@
 package com.github.fabianmurariu.g4s.sparse.grbv2
 
 import org.scalacheck.Prop._
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.Arbitrary
 import cats.implicits._
 import scala.reflect.ClassTag
 import com.github.fabianmurariu.g4s.sparse.grb.{
@@ -10,17 +10,14 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
   EqOp
 }
 import scala.concurrent.ExecutionContext
-import cats.effect.{IO, Resource}
-import scala.concurrent.Future
 import munit.ScalaCheckSuite
-import scala.collection.immutable.{Vector => SVector}
-import org.scalacheck.Properties
-import scala.collection.generic.CanBuildFrom
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.MonoidBuilder
 import scala.math.Numeric.Implicits._
 import com.github.fabianmurariu.g4s.sparse.grb.SparseVectorHandler
+import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
+import cats.effect.IO
 
 class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
 
@@ -55,7 +52,7 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
 
         val io = (for {
           plus <- GrBMonoid[IO, A](OP.plus, N.zero)
-          mat <- Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
+          mat <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
         } yield (plus, mat)).use {
           case (plus, mat) =>
             for {
@@ -84,11 +81,11 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
         val (is, js, vs) = tuples(m)
 
         val io: IO[Unit] = (for {
-          mat <- Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
+          mat <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
           v <- mat.reduce(OP.max)
         } yield v).use {
           _.extract.map {
-            case (is, actualVs) =>
+            case (_, actualVs) =>
               assertEquals(actualVs.max, vs.max)
           }
         }
@@ -104,11 +101,11 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
         val (is, js, vs) = tuples(m)
 
         val io: IO[Unit] = (for {
-          mat <- Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
+          mat <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
           v <- mat.reduce(OP.min)
         } yield v).use {
           _.extract.map {
-            case (is, actualVs) =>
+            case (_, actualVs) =>
               assertEquals(actualVs.min, vs.min)
           }
         }
@@ -124,11 +121,11 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
         val (is, js, vs) = tuples(m)
 
         val io: IO[Unit] = (for {
-          mat <- Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
+          mat <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
           v <- mat.reduce(OP.plus)
         } yield v).use {
           _.extract.map {
-            case (is, actualVs) =>
+            case (_, actualVs) =>
               checkEquals(actualVs.sum, vs.sum)
           }
         }

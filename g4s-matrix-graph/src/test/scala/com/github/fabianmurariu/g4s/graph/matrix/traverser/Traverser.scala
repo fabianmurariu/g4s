@@ -9,9 +9,9 @@ import scala.reflect.runtime.universe.{Traverser => _, _}
 object Traverser {
 
   case class QGEdges(
-                      out: mutable.Set[EdgeRef] = mutable.Set.empty,
-                      in: mutable.Set[EdgeRef] = mutable.Set.empty
-                    )
+      out: mutable.Set[EdgeRef] = mutable.Set.empty,
+      in: mutable.Set[EdgeRef] = mutable.Set.empty
+  )
 
   type QueryGraph = mutable.Map[NodeRef, QGEdges]
   type Traverser[T] = State[QueryGraph, T]
@@ -32,7 +32,7 @@ object Traverser {
   }
 
   def edge[T](src: NodeRef, dst: NodeRef)(
-    implicit tt: TypeTag[T]
+      implicit tt: TypeTag[T]
   ): Traverser[EdgeRef] = State { qg =>
     val label = tt.tpe.toString()
     val ref = (for {
@@ -91,7 +91,7 @@ object Traverser {
     }
 
     def connectedComponentsUndirected
-    : Seq[mutable.Map[NodeRef, Option[NodeRef]]] = {
+        : Seq[mutable.Map[NodeRef, Option[NodeRef]]] = {
       var iter = qg.keysIterator
       val out = mutable.ArrayBuffer[mutable.Map[NodeRef, Option[NodeRef]]]()
 
@@ -106,9 +106,9 @@ object Traverser {
     }
 
     /**
-     * Starting from a node find all paths in the Query graph
-     * return them as q Queue of edges
-     */
+      * Starting from a node find all paths in the Query graph
+      * return them as q Queue of edges
+      */
     def walkPaths(v: NodeRef): Seq[Queue[EdgeRef]] = {
       val ns = qg.neighbours(v)
       var paths = ns.map(Queue(_))
@@ -144,8 +144,8 @@ object Traverser {
     }
 
     /**
-     * Transform the Query graph into matrix operations
-     */
+      * Transform the Query graph into matrix operations
+      */
     def compile: Either[QGCompileError, GraphMatrixOp] = {
       if (qg.size <= 1) {
         Left(MinNodeGraphError)
@@ -164,7 +164,7 @@ object Traverser {
         // e.dst is used to check if the next edge points into the dest (dst <-) or out of it (dst ->)
         val (_, op) = p.foldLeft((e.dst, algOp)) {
           case ((lastDst, op), nextE)
-            if nextE.src == lastDst => //we're pointed out ->
+              if nextE.src == lastDst => //we're pointed out ->
             val nextOp = MatMul(
               left = MatMul(
                 left = op,
@@ -174,7 +174,7 @@ object Traverser {
             )
             nextE.dst -> nextOp
           case ((lastDst, op), nextE)
-            if nextE.dst == lastDst => //we're pointed out <-
+              if nextE.dst == lastDst => //we're pointed out <-
             val nextOp = MatMul(
               left = MatMul(
                 left = op,
@@ -189,9 +189,9 @@ object Traverser {
     }
 
     /**
-     * Starting from n:NodeRef create the matrix operation tree
-     *
-     */
+      * Starting from n:NodeRef create the matrix operation tree
+      *
+      */
     def select(n: NodeRef, exclude: Set[EdgeRef] = Set.empty): GraphMatrixOp = {
       // 1. get adjacency edges, remove edges explored
       val edges = neighbours(n).filterNot(exclude).toSet
@@ -216,12 +216,70 @@ object Traverser {
         }
       }
     }
+
+    type Plan = (Set[NodeRef], GraphMatrixOp)
+
+    def plan: GraphMatrixOp = {
+
+      def canJoin(p1: Plan, p2: Plan): Boolean = {
+        false
+      }
+
+      def join(p1: Plan, p2: Plan): Option[Plan] = {
+        None
+      }
+
+      def expandPlan(p: Plan): Seq[Plan] =
+        Seq.empty
+
+      def cost(p: Plan): Int =
+        p._2.cost
+
+      def contains(p1: Plan, p: Plan): Boolean = {
+        p._1.subsetOf(p1._1)
+      }
+
+      var planTable: Map[Set[NodeRef], GraphMatrixOp] =
+        qg.keys.map(qn => Set(qn) -> Nodes(qn.name)).toMap
+
+      var candidates: Vector[Plan] = Vector()
+
+      do {
+
+        for (p1 <- planTable) {
+          for (p2 <- planTable) {
+            join(p1, p2) match {
+              case None =>
+              case Some(p1join2) =>
+                candidates = candidates :+ p1join2
+            }
+          }
+        }
+
+        planTable.flatMap(plan => expandPlan(plan)).foreach { p: Plan =>
+          candidates = candidates :+ p
+        }
+
+        if (candidates.length >= 1) {
+          val bestPlan = candidates.minBy(cost)
+          for (plan <- planTable.iterator) {
+            if (contains(bestPlan, plan)) {
+              planTable = planTable - plan._1
+            }
+          }
+
+        }
+      } while (candidates.length >= 1)
+
+      planTable.head._2
+
+    }
   }
 
   case class Path[T](path: List[T], seen: Set[T], orig: NodeRef)
 
   sealed trait QGCompileError
   object MinNodeGraphError
-    extends RuntimeException("Cannot process query with 1 or less nodes")
+      extends RuntimeException("Cannot process query with 1 or less nodes")
       with QGCompileError
 }

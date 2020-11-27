@@ -7,6 +7,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps.float
 import com.github.fabianmurariu.g4s.sparse.grb.MxM
 import cats.Monad
 import cats.effect.concurrent.Ref
+import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
 class DocSpec extends munit.FunSuite {
 
@@ -31,8 +32,8 @@ class DocSpec extends munit.FunSuite {
     val start = 0L
 
     val setup = (
-      Matrix.fromTuples[IO, Boolean](7, 7)(is, js, vs), // edges
-      Matrix[IO, Boolean](1, 7), // frontier
+      GrBMatrix.fromTuples[IO, Boolean](7, 7)(is, js, vs), // edges
+      GrBMatrix[IO, Boolean](1, 7), // frontier
       GrBSemiring[IO, Boolean, Boolean, Boolean](lor, land, false)
     ).tupled
 
@@ -55,9 +56,9 @@ class DocSpec extends munit.FunSuite {
     val start = 0L
 
     val setup = (
-      Matrix.fromTuples[IO, Float](7, 7)(isW, jsW, vsW), // edges
-      Matrix[IO, Float](1, 7),
-      Matrix[IO, Float](1, 7),
+      GrBMatrix.fromTuples[IO, Float](7, 7)(isW, jsW, vsW), // edges
+      GrBMatrix[IO, Float](1, 7),
+      GrBMatrix[IO, Float](1, 7),
       GrBSemiring[IO, Float, Float, Float](float.min, float.plus, Float.PositiveInfinity)
     ).tupled
 
@@ -71,8 +72,8 @@ class DocSpec extends munit.FunSuite {
           // set diag to 0.0
           _ <- Monad[IO].iterateUntilM(0L){i => graph.set(i, i, 0.0f).map(_ => i+1)}(_ >= 7)
           i <- Ref.of[IO, Int](0)
-          dtmp <- Ref.of[IO, Matrix[IO, Float]](d0)
-          d <- Ref.of[IO, Matrix[IO, Float]](d1)
+          dtmp <- Ref.of[IO, GrBMatrix[IO, Float]](d0)
+          d <- Ref.of[IO, GrBMatrix[IO, Float]](d1)
           _ <- Monad[IO].untilM_{
             for {
               d0x <- dtmp.get

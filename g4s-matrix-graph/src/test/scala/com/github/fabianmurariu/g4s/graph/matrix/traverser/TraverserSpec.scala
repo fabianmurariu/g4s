@@ -4,32 +4,12 @@ import scala.collection.immutable.Queue
 // AST for matrix operations before executing the actual GRB ops
 import scala.reflect.runtime.universe.{Traverser => _}
 
-sealed trait Vertex
-class Av extends Vertex
-class Bv extends Vertex
-class Cv extends Vertex
-class Dv extends Vertex
-class Ev extends Vertex
-class Fv extends Vertex
-
-sealed trait Relation
-class X extends Relation
-class Y extends Relation
 
 class TraverserSpec extends munit.FunSuite with QueryGraphSamples {
   import Traverser._
 
   import scala.collection.mutable
-  val aTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Av"
-  val bTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Bv"
-  val cTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Cv"
-  val dTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Dv"
-  val eTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Ev"
-  val xTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.X"
-  val yTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Y"
 
-  def eval[T](t: Traverser[T]): QueryGraph =
-    t.runS(emptyQG).value
 
   test("select node Bv resolve Av*X*Bv") {
     val qg = eval(singleEdge_Av_X_Bv)
@@ -60,6 +40,20 @@ class TraverserSpec extends munit.FunSuite with QueryGraphSamples {
     val qg = eval(Av_X_Bv_Y_Cv_and_Ev_X_Cv_and_Cv_Y_Dv)
     val matOps = qg.select(NodeRef(bTag))
     assertEquals(matOps.toStrExpr(true), "((((Dv*T(Y))*((Ev*X)*Cv))*T(Y))*((Av*X)*Bv))")
+  }
+
+  test("select node Cv,Ev resolve from a->b->c->d, e->c") {
+    val qg = eval(Av_X_Bv_Y_Cv_and_Ev_X_Cv_and_Cv_Y_Dv)
+    val matOpsD = qg.select(NodeRef(dTag))
+    assertEquals(matOpsD.toStrExpr(true), "((((((Av*X)*Bv)*Y)*((Ev*X)*Cv))*Y)*Dv)")
+    val matOpsE = qg.select(NodeRef(eTag))
+    assertEquals(matOpsE.toStrExpr(true), "((((Dv*T(Y))*((((Av*X)*Bv)*Y)*Cv))*T(X))*Ev)")
+    val matOpsA = qg.select(NodeRef(aTag))
+    assertEquals(matOpsA.toStrExpr(true), "((((((Dv*T(Y))*((Ev*X)*Cv))*T(Y))*Bv)*T(X))*Av)")
+    val matOpsC = qg.select(NodeRef(cTag))
+    assertEquals(matOpsC.toStrExpr(true), "((Dv*T(Y))*((((Av*X)*Bv)*Y)*((Ev*X)*Cv)))")
+    val matOpsB = qg.select(NodeRef(bTag))
+    assertEquals(matOpsB.toStrExpr(true), "((((Dv*T(Y))*((Ev*X)*Cv))*T(Y))*((Av*X)*Bv))")
   }
 
   test("single node traverser") {
@@ -358,6 +352,7 @@ class TraverserSpec extends munit.FunSuite with QueryGraphSamples {
 
     assertEquals(matOps.algStr, "Cv*Y*Bv*T(X)*Av*T(X)*Dv")
   }
+
 }
 
 trait QueryGraphSamples {
@@ -400,4 +395,26 @@ trait QueryGraphSamples {
       _ <- edge[Y](c, d)
     } yield ()
 
+  def eval[T](t: Traverser[T]): QueryGraph =
+    t.runS(emptyQG).value
+
+  val aTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Av"
+  val bTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Bv"
+  val cTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Cv"
+  val dTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Dv"
+  val eTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Ev"
+  val xTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.X"
+  val yTag = "com.github.fabianmurariu.g4s.graph.matrix.traverser.Y"
 }
+
+sealed trait Vertex
+class Av extends Vertex
+class Bv extends Vertex
+class Cv extends Vertex
+class Dv extends Vertex
+class Ev extends Vertex
+class Fv extends Vertex
+
+sealed trait Relation
+class X extends Relation
+class Y extends Relation

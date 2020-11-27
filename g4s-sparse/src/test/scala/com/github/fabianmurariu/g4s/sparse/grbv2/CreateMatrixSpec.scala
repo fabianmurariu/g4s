@@ -1,21 +1,21 @@
 package com.github.fabianmurariu.g4s.sparse.grbv2
 
-import org.scalacheck.Prop._
-import org.scalacheck.{Arbitrary, Gen}
-import cats.implicits._
-import scala.reflect.ClassTag
-import com.github.fabianmurariu.g4s.sparse.grb.{
-  SparseMatrixHandler,
-  Reduce,
-  EqOp
-}
-import scala.concurrent.ExecutionContext
-import cats.effect.{IO, Resource}
-import scala.concurrent.Future
-import munit.ScalaCheckSuite
-import scala.collection.immutable.{Vector => SVector}
-import org.scalacheck.Properties
 import scala.collection.generic.CanBuildFrom
+import scala.collection.immutable.{Vector => SVector}
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
+import scala.reflect.ClassTag
+
+import cats.effect.IO
+import cats.effect.Resource
+import cats.implicits._
+import com.github.fabianmurariu.g4s.sparse.grb.EqOp
+import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
+import com.github.fabianmurariu.g4s.sparse.grb.Reduce
+import com.github.fabianmurariu.g4s.sparse.grb.SparseMatrixHandler
+import munit.ScalaCheckSuite
+import org.scalacheck.Arbitrary
+import org.scalacheck.Prop._
 
 class CreateMatrixSpec extends ScalaCheckSuite {
   implicit val ec = ExecutionContext.global
@@ -38,7 +38,7 @@ class CreateMatrixSpec extends ScalaCheckSuite {
     ) {
       forAll { m: MatrixTuples[A] =>
         val (is, js, vs) = tuples(m)
-        val io = Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs).use {
+        val io = GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs).use {
           mat =>
             for {
               _ <- mat.resize(m.rows + 5, m.cols + 5)
@@ -56,7 +56,7 @@ class CreateMatrixSpec extends ScalaCheckSuite {
         val (is, js, vs) = tuples(m)
 
         val io = for {
-          a <- Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
+          a <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
           b <- a.duplicateF
         } yield (a, b)
 
@@ -71,7 +71,7 @@ class CreateMatrixSpec extends ScalaCheckSuite {
       forAll { m: MatrixTuples[A] =>
         val (is, js, vs) = tuples(m)
         val io = (for {
-          a <- Matrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
+          a <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
           b <- a.transpose()
         } yield (a, b)).use {
           case (a, b) =>
@@ -94,7 +94,7 @@ class CreateMatrixSpec extends ScalaCheckSuite {
       forAll { m: MatrixTuples[A] =>
         val (is, js, vs) = tuples(m)
 
-        val io = Matrix[IO, A](m.rows, m.cols)
+        val io = GrBMatrix[IO, A](m.rows, m.cols)
           .use { mat =>
             for {
               _ <- mat.set(is, js, vs)
@@ -121,7 +121,7 @@ class CreateMatrixSpec extends ScalaCheckSuite {
       forAll { m: MatrixTuples[A] =>
         val (is, js, vs) = tuples(m)
 
-        val io = Matrix
+        val io = GrBMatrix
           .fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
           .use { mat =>
             for {
@@ -151,4 +151,3 @@ class CreateMatrixSpec extends ScalaCheckSuite {
   createdProp[Double]
 
 }
-

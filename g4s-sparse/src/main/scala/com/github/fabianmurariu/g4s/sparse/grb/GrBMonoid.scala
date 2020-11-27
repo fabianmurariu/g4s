@@ -5,7 +5,7 @@ import com.github.fabianmurariu.unsafe.GRBCORE
 import cats.effect.Resource
 import cats.effect.Sync
 
-final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T) extends AutoCloseable {
+final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T)(implicit G:GRB) extends AutoCloseable {
 
   override def close(): Unit = {
     GRBCORE.freeMonoid(pointer)
@@ -16,10 +16,9 @@ final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T) extends Auto
 
 object GrBMonoid {
 
-  def apply[F[_]:Sync, T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T) =
+  def apply[F[_]:Sync, T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T)(implicit G:GRB) =
     Resource.fromAutoCloseable(
       Sync[F].delay{
-        grb.GRB
         new GrBMonoid(MonoidBuilder[T].createMonoid(op.pointer, zero), zero)
 }
     )

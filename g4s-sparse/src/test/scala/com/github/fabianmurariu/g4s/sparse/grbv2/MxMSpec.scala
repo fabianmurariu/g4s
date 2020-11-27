@@ -15,6 +15,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.MonoidBuilder
 import com.github.fabianmurariu.g4s.sparse.grb.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
+import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
 class MxMSpec extends ScalaCheckSuite {
   implicit val ec = ExecutionContext.global
@@ -30,11 +31,11 @@ class MxMSpec extends ScalaCheckSuite {
         val rM1M2 = for {
           add <- GrBMonoid[IO, A](OP.plus, N.zero)
           sr <- GrBSemiring[IO, A, A, A](add, OP.times)
-          ma <- Matrix[IO, A](mt.size, mt.size)
-          mb <- Matrix[IO, A](mt.size, mt.size)
-          mc <- Matrix[IO, A](mt.size, mt.size)
-          left <- Matrix[IO, A](mt.size, mt.size)
-          right <- Matrix[IO, A](mt.size, mt.size)
+          ma <- GrBMatrix[IO, A](mt.size, mt.size)
+          mb <- GrBMatrix[IO, A](mt.size, mt.size)
+          mc <- GrBMatrix[IO, A](mt.size, mt.size)
+          left <- GrBMatrix[IO, A](mt.size, mt.size)
+          right <- GrBMatrix[IO, A](mt.size, mt.size)
         } yield (ma, mb, mc, left, right, sr)
 
         val io = rM1M2

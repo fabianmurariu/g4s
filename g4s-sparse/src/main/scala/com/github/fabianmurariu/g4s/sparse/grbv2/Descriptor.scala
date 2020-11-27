@@ -6,7 +6,7 @@ import cats.Monad
 import cats.effect.Sync
 import cats.effect.Resource
 import cats.implicits._
-import com.github.fabianmurariu.g4s.sparse.grb.{grb, GrBError}
+import com.github.fabianmurariu.g4s.sparse.grb.{GRB, GrBError}
 
 trait Descriptor[F[_]] {
   def pointer: F[GrBDescriptor]
@@ -34,10 +34,9 @@ trait Descriptor[F[_]] {
 }
 
 object Descriptor {
-  def apply[F[_]](implicit S: Sync[F]): Resource[F, Descriptor[F]] =
+  def apply[F[_]](implicit S: Sync[F], G:GRB): Resource[F, Descriptor[F]] =
     Resource
       .fromAutoCloseable(S.delay {
-        grb.GRB
         new GrBDescriptor(GRBCORE.createDescriptor())
       })
       .map { p =>

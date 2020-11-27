@@ -7,6 +7,7 @@ import org.scalacheck.Arbitrary
 import cats.effect.IO
 import cats.effect.Resource
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
+import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
 class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
 
@@ -58,8 +59,8 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
           val (is, js, vs) = tuples(mt)
           val (r2, c2) = ((mt.rows / 2).toInt, mt.cols.toInt)
           val io: IO[Unit] = (for {
-            a <- Matrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
-            b <- Matrix[IO, T](r2, c2)
+            a <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
+            b <- GrBMatrix[IO, T](r2, c2)
             _ <- Resource.liftF(
               b.set(a(0 until r2, 0 until c2))
             ) // b = A(0:r2, 0:c2)
@@ -85,8 +86,8 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
         val (is, js, vs) = tuples(mt)
         val (r2, c2) = ((mt.rows * 2).toInt, mt.cols.toInt)
         val io: IO[Unit] = (for {
-          b <- Matrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
-          a <- Matrix[IO, T](r2, c2)
+          b <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
+          a <- GrBMatrix[IO, T](r2, c2)
           _ <- Resource.liftF(
             a(0 until mt.rows.toInt, 0 until mt.cols.toInt).set(b)
           ) // b(0:r, 0:c)= A

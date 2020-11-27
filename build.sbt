@@ -107,7 +107,8 @@ lazy val g4sMatrixGraph = (project in file("g4s-matrix-graph"))
     commonSettings,
     name := "g4s-matrix-graph",
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-free" % "2.2.0"
+  "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.1",
+  "org.typelevel" %% "cats-free" % "2.2.0"
     )
   )
 // lazy val g4sGraph = (project in file("g4s-graph"))
