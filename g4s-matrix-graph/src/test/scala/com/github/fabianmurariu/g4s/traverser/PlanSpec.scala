@@ -1,4 +1,4 @@
-package com.github.fabianmurariu.g4s.graph.matrix.traverser
+package com.github.fabianmurariu.g4s.traverser
 
 class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 

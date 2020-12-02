@@ -1,4 +1,4 @@
-package com.github.fabianmurariu.g4s.graph.matrix.traverser
+package com.github.fabianmurariu.g4s.ops
 
 trait GraphMatrixOp { self =>
   def toStrExpr(paren: Boolean = false): String = self match {

@@ -77,32 +77,32 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
       }
     }
 
-  property(
-    s"set top half of matrix b to a, resize matrix b to a, the result should be equal, ${implicitly[ClassTag[T]]}"
-  ) {
-    forAll { mt: MatrixTuples[T] =>
-      (mt.rows % 2 == 0 && mt.cols > 2) ==> {
+    property(
+      s"set top half of matrix b to a, resize matrix b to a, the result should be equal, ${implicitly[ClassTag[T]]}"
+    ) {
+      forAll { mt: MatrixTuples[T] =>
+        (mt.rows % 2 == 0 && mt.cols > 2) ==> {
 
-        val (is, js, vs) = tuples(mt)
-        val (r2, c2) = ((mt.rows * 2).toInt, mt.cols.toInt)
-        val io: IO[Unit] = (for {
-          b <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
-          a <- GrBMatrix[IO, T](r2, c2)
-          _ <- Resource.liftF(
-            a(0 until mt.rows.toInt, 0 until mt.cols.toInt).set(b)
-          ) // b(0:r, 0:c)= A
-          _ <- Resource.liftF(a.resize(mt.rows, mt.cols))
-          check <- Resource.liftF(b.isEq(a))
-        } yield check).use(c =>
-          IO {
-            assertEquals(c, true)
-          }
-        )
+          val (is, js, vs) = tuples(mt)
+          val (r2, c2) = ((mt.rows * 2).toInt, mt.cols.toInt)
+          val io: IO[Unit] = (for {
+            b <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
+            a <- GrBMatrix[IO, T](r2, c2)
+            _ <- Resource.liftF(
+              a(0 until mt.rows.toInt, 0 until mt.cols.toInt).set(b)
+            ) // b(0:r, 0:c)= A
+            _ <- Resource.liftF(a.resize(mt.rows, mt.cols))
+            check <- Resource.liftF(b.isEq(a))
+          } yield check).use(c =>
+            IO {
+              assertEquals(c, true)
+            }
+          )
 
-        io.unsafeRunSync()
+          io.unsafeRunSync()
+        }
       }
     }
-  }
 
   }
 }

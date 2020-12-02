@@ -1,4 +1,4 @@
-package com.github.fabianmurariu.g4s.graph.matrix.traverser
+package com.github.fabianmurariu.g4s.traverser
 
 sealed abstract class Ref { self =>
   private def shortName(s: String) = s.split("\\.").last

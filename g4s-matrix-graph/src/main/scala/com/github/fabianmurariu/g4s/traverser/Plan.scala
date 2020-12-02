@@ -1,6 +1,7 @@
-package com.github.fabianmurariu.g4s.graph.matrix.traverser
+package com.github.fabianmurariu.g4s.traverser
 
-import com.github.fabianmurariu.g4s.graph.matrix.traverser.Traverser.QGEdges
+import com.github.fabianmurariu.g4s.ops.{Edges, GraphMatrixOp, MatMul, Nodes, Transpose}
+import com.github.fabianmurariu.g4s.traverser.Traverser.QGEdges
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -8,7 +9,8 @@ import scala.collection.mutable
 sealed trait Plan
 sealed trait BasicPlan extends Plan
 case class NodeLoad(label: String) extends BasicPlan
-case class EdgeLoad(tpe: String) extends BasicPlan
+@deprecated("not sure if this makes sense, Expand might be sufficient")
+case class EdgeLoad(tpe: String) extends BasicPlan // TODO: check if this makes sense
 case class Binding(n: NodeRef) extends BasicPlan
 case class Expand(
     from: BasicPlan,

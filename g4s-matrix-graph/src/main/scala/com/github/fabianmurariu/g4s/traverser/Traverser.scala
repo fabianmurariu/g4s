@@ -1,6 +1,7 @@
-package com.github.fabianmurariu.g4s.graph.matrix.traverser
+package com.github.fabianmurariu.g4s.traverser
 
 import cats.data.State
+import com.github.fabianmurariu.g4s.ops.{Edges, GraphMatrixOp, MatMul, Nodes, Transpose}
 
 import scala.collection.immutable.Queue
 import scala.collection.mutable
