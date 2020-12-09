@@ -11,6 +11,26 @@ import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
 class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
 
+  property("extract top row of matrix") {
+    forAll { mt: MatrixTuples[Boolean] =>
+      val (is, js, vs) = tuples(mt)
+      val io = GrBMatrix
+        .fromTuples[IO, Boolean](mt.rows, mt.cols)(is, js, vs)
+        .use { mat =>
+          GrBMatrix[IO, Boolean](1, mt.cols).use { into =>
+            val sel = mat(0L until 1L, 0L until mt.cols)
+            (for {
+                      m_shape <- into.shape
+                      sel_shap <- sel.show()
+                    } yield println(s"set $sel_shap into $m_shape")) *> into .set(sel).flatMap(_.extract)
+          }
+
+        }
+
+        io.unsafeRunSync()
+        true
+    }
+  }
   // test("4x4 matrix, select the upper half") {
 
   //   val mt = MatrixTuples[Boolean](
@@ -57,12 +77,12 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
         (mt.rows % 2 == 0 && mt.cols > 2) ==> {
 
           val (is, js, vs) = tuples(mt)
-          val (r2, c2) = ((mt.rows / 2).toInt, mt.cols.toInt)
+          val (r2, c2) = ((mt.rows / 2).toLong, mt.cols.toLong)
           val io: IO[Unit] = (for {
             a <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
             b <- GrBMatrix[IO, T](r2, c2)
             _ <- Resource.liftF(
-              b.set(a(0 until r2, 0 until c2))
+              b.set(a(0L until r2, 0L until c2))
             ) // b = A(0:r2, 0:c2)
             _ <- Resource.liftF(a.resize(r2, c2))
             check <- Resource.liftF(b.isEq(a))
@@ -84,7 +104,7 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
         (mt.rows % 2 == 0 && mt.cols > 2) ==> {
 
           val (is, js, vs) = tuples(mt)
-          val (r2, c2) = ((mt.rows * 2).toInt, mt.cols.toInt)
+          val (r2, c2) = ((mt.rows * 2).toLong, mt.cols.toLong)
           val io: IO[Unit] = (for {
             b <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
             a <- GrBMatrix[IO, T](r2, c2)

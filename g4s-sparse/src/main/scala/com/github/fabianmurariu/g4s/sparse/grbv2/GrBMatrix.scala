@@ -180,6 +180,14 @@ sealed trait GrBMatrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double)
   def clear: F[Unit] = pointer.map { mp =>
     GrBError.check(GRBCORE.clearMatrix(mp.ref))
   }
+
+  def release: F[Unit] = pointer.map{mp => 
+    GrBError.check(GRBCORE.freeMatrix(mp.ref))
+  }
+
+  def grbWait: F[Unit] = pointer.map{mp => 
+    GrBError.check(GRBCORE.grbWaitMatrix(mp.ref))
+  }
 }
 
 

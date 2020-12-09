@@ -1,7 +1,7 @@
 ThisBuild / scalaVersion := "2.12.11"
 ThisBuild / organization := "com.github.fabianmurariu"
 
-val grbVersion = "0.1.15"
+val grbVersion = "0.1.20"
 
 lazy val commonSettings = Seq(
   scalacOptions in (Compile, console) --= Seq(
@@ -63,7 +63,6 @@ lazy val commonSettings = Seq(
   libraryDependencies ++= Seq(
     "org.typelevel" %% "cats-effect" % "2.2.0",
     "com.github.mpilquist" %% "simulacrum" % "0.19.0",
-    "co.fs2" %% "fs2-core" % "2.4.4",
     "org.scalameta" %% "munit" % "0.7.11" % Test,
     "org.scalameta" %% "munit-scalacheck" % "0.7.11" % Test
   ),
@@ -86,41 +85,31 @@ lazy val g4sSparse = (project in file("g4s-sparse"))
     commonSettings,
     name := "g4s-sparse",
     libraryDependencies ++= Seq(
-      "com.github.fabianmurariu" % "graphblas-java-native" % grbVersion,
+      "com.github.fabianmurariu" % "graphblas-package" % grbVersion,
       "com.github.fabianmurariu" % "graphblas-java" % grbVersion % Test classifier "tests"
     )
   )
-lazy val docs = project       // new documentation project
+lazy val docs = project // new documentation project
   .in(file("g4s-docs")) // important: it must not be docs/
   .dependsOn(g4sSparse)
   .enablePlugins(MdocPlugin)
   .settings(
-     mdocVariables := Map(
-     "VERSION" -> version.value
-   )
+    mdocVariables := Map(
+      "VERSION" -> version.value
+    )
   )
 
 lazy val g4sMatrixGraph = (project in file("g4s-matrix-graph"))
   .enablePlugins(MUnitReportPlugin)
-  .dependsOn(g4sSparse)
+  .dependsOn(g4sSparse % "test->test;compile->compile")
   .settings(
     commonSettings,
     name := "g4s-matrix-graph",
-  libraryDependencies ++= Seq(
-  "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.1",
-  "org.typelevel" %% "cats-free" % "2.2.0"
+    libraryDependencies ++= Seq(
+      "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.1",
+      "co.fs2" %% "fs2-core" % "2.4.4",
+      "org.typelevel" %% "cats-free" % "2.2.0"
     )
   )
-// lazy val g4sGraph = (project in file("g4s-graph"))
-//   .aggregate(g4sSparse)
-//   .dependsOn(g4sSparse)
-//   .settings(
-//     commonSettings,
-//     name := "g4s-graph",
-//     libraryDependencies ++= Seq(
-//       "org.typelevel" %% "cats-free" % "2.1.1",
-//       "co.fs2" %% "fs2-core" % "2.2.1"
-//     )
-//   )
 
 g4sSparse / Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat

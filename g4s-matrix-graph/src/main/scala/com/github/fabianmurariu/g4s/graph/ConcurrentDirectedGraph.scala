@@ -11,7 +11,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
   MxM,
   SparseMatrixHandler
 }
-import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
+import com.github.fabianmurariu.g4s.sparse.grbv2.{GrBMatrix, MatrixSelection}
 import com.github.fabianmurariu.g4s.traverser._
 
 import java.util.concurrent.ConcurrentHashMap
@@ -33,8 +33,8 @@ class ConcurrentDirectedGraph[F[_], V, E](
     ds: DataStore[F, V, E]
 )(implicit F: Concurrent[F], P: Parallel[F], G: GRB) { self =>
 
-  def getV(id:Long): F[Option[V]] = ds.getV(id)
-  
+  def getV(id: Long): F[Option[V]] = ds.getV(id)
+
   /**
     * Insert the vertex and get back the id
     */
@@ -97,7 +97,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
           _ <- b.use(_.show().map(println))
           _ <- e.use(_.show().map(println))
           size <- e.use(_.nrows)
-          out <- F.pure(GrBMatrix.unsafe[F, Boolean](size, size))
+          out <- F.delay(GrBMatrix.unsafe[F, Boolean](size, size))
           resMat <- a.use { aMat =>
             b.use { bMat =>
               e.use { eMat =>
@@ -118,8 +118,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
       case (acc, (key, plan)) =>
         foldPlan(plan)
           .flatMap(outMat =>
-            outMat
-              .use { _.extract } <* outMat.release // manual release!
+            F.bracket(F.pure(outMat))(_.use(_.extract))(_.release)
           )
           .flatMap {
             case (_, nodeIndices, _) =>
@@ -137,42 +136,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
   }
 }
 
-case class BlockingMatrix[F[_], A](
-    lock: Semaphore[F],
-    mat: GrBMatrix[F, A],
-    var shutdown: Boolean = false
-)(
-    implicit F: Concurrent[F]
-) {
-  self =>
-  def use[B](f: GrBMatrix[F, A] => F[B]): F[B] =
-    F.bracket(lock.acquire) { _ =>
-      if (shutdown) {
-        F.raiseError[B](new IllegalStateException("Attempting to modify"))
-      } else {
-        f(mat)
-      }
-    }(_ => lock.release)
 
-  def release: F[Unit] =
-    F.bracket(lock.acquire)(_ => F.delay(self.shutdown = true))(_ =>
-      lock.release
-    )
-}
-
-object BlockingMatrix {
-  def apply[F[_]: Concurrent, A: SparseMatrixHandler](
-      implicit G: GRB
-  ): Resource[F, BlockingMatrix[F, A]] =
-    GrBMatrix[F, A](16, 16).evalMap(mat =>
-      Semaphore[F](1).map(lock => BlockingMatrix(lock, mat))
-    )
-
-  def fromGrBMatrix[F[_]: Concurrent, A](
-      mat: GrBMatrix[F, A]
-  ): F[BlockingMatrix[F, A]] =
-    Semaphore[F](1).map(lock => BlockingMatrix(lock, mat))
-}
 
 class LabelledMatrices[F[_]](
     private[graph] val mats: ConcurrentHashMap[
@@ -185,14 +149,12 @@ class LabelledMatrices[F[_]](
       : F[java.util.function.Function[String, BlockingMatrix[F, Boolean]]] =
     for {
       lock <- Semaphore[F](1)
-    } yield _ => BlockingMatrix(lock, GrBMatrix.unsafe[F, Boolean](16, 16))
+    } yield _ => new BlockingMatrix(lock, GrBMatrix.unsafe[F, Boolean](16, 16))
 
   def getOrCreate(label: String): F[BlockingMatrix[F, Boolean]] =
     for {
       matMaker <- defaultProvider
-      mat <- F.delay{
-        mats.computeIfAbsent(label, matMaker)
-      }
+      mat <- F.delay(mats.computeIfAbsent(label, matMaker))
     } yield mat
 
 }
@@ -219,8 +181,8 @@ object ConcurrentDirectedGraph {
       implicit G: GRB
   ): Resource[F, ConcurrentDirectedGraph[F, V, E]] =
     for {
-      edges <- BlockingMatrix[F, Boolean]
-      edgesT <- BlockingMatrix[F, Boolean]
+      edges <- BlockingMatrix[F, Boolean](16, 16)
+      edgesT <- BlockingMatrix[F, Boolean](16, 16)
       edgeTypes <- LabelledMatrices[F]
       edgeTypesTranspose <- LabelledMatrices[F]
       nodeLabels <- LabelledMatrices[F]

@@ -1,21 +1,11 @@
 package com.github.fabianmurariu.g4s.graph
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
+import com.github.fabianmurariu.g4s.IOSupport
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import com.github.fabianmurariu.g4s.traverser._
-import munit.FunSuite
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
-class ConcurrentDirectedGraphTest extends FunSuite with QueryGraphSamples {
-
-  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
-  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
-
-  override def munitValueTransforms = super.munitValueTransforms ++ List(
-    new ValueTransform("IO", {
-      case io: IO[Any] => io.unsafeToFuture()
-    })
-  )
+class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
 
   def graph = ConcurrentDirectedGraph[IO, Vertex, Relation]
 
