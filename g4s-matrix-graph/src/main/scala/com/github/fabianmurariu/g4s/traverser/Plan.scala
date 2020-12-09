@@ -9,8 +9,6 @@ import scala.collection.mutable
 sealed trait Plan
 sealed trait BasicPlan extends Plan
 case class NodeLoad(label: String) extends BasicPlan
-@deprecated("not sure if this makes sense, Expand might be sufficient")
-case class EdgeLoad(tpe: String) extends BasicPlan // TODO: check if this makes sense
 case class Binding(n: NodeRef) extends BasicPlan
 case class Expand(
     from: BasicPlan,
@@ -18,6 +16,7 @@ case class Expand(
     name: String,
     transpose: Boolean
 ) extends BasicPlan
+
 case class MasterPlan(plans: Map[NodeRef, BasicPlan]) extends Plan
 
 object Plan {
@@ -25,7 +24,6 @@ object Plan {
   private def planAsGraphMatrixOp(mp: MasterPlan)(p: BasicPlan): GraphMatrixOp =
     p match {
       case NodeLoad(label) => Nodes(label)
-      case EdgeLoad(tpe)   => Edges(tpe)
       case Binding(ref)    => planAsGraphMatrixOp(mp)(mp.plans(ref))
       case Expand(from, to, name, true) =>
         MatMul(

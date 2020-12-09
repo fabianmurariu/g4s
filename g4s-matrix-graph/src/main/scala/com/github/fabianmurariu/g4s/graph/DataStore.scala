@@ -4,6 +4,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import cats.effect.{Sync, concurrent}
 import cats.implicits._
+import scala.reflect.ClassTag
 
 trait DataStore[F[_], V, E] {
 
@@ -11,7 +12,9 @@ trait DataStore[F[_], V, E] {
 
   def persistE(src: Long, dst: Long, e: E): F[Unit]
 
-  def getV(id:Long):F[Option[V]]
+  def getV(id: Long): F[Option[V]]
+
+  def getVs(ids: Array[Long]): F[Array[V]]
 }
 
 object DataStore {
@@ -25,7 +28,7 @@ object DataStore {
   private class DefaultDataStoreImpl[F[_], V, E](
       ids: concurrent.Ref[F, Long],
       map: ConcurrentHashMap[Long, NodeBlock[V, E]]
-  )(implicit F: Sync[F])
+  )(implicit F: Sync[F], CT: ClassTag[V])
       extends DataStore[F, V, E] {
 
     def nodeDefault(v: V): F[
@@ -77,9 +80,21 @@ object DataStore {
 
     override def getV(id: Long): F[Option[V]] =
       F.delay(Option(map.get(id)).map(_.v))
+
+    def getVs(ids: Array[Long]): F[Array[V]] =
+      F.delay {
+        ids.iterator
+          .map(map.get(_))
+          .filter(_ != null)
+          .map(_.v)
+          .toArray
+      }
   }
 
-  def default[F[_], V, E](implicit S: Sync[F]): F[DataStore[F, V, E]] =
+  def default[F[_], V, E](
+      implicit S: Sync[F],
+      CT: ClassTag[V]
+  ): F[DataStore[F, V, E]] =
     concurrent.Ref
       .of[F, Long](0)
       .map(ref => new DefaultDataStoreImpl(ref, new ConcurrentHashMap()))

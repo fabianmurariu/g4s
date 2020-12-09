@@ -16,8 +16,9 @@ import com.github.fabianmurariu.g4s.traverser._
 
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.reflect.runtime.universe.{Traverser => _, _}
+import fs2.Chunk
+import scala.reflect.ClassTag
 
 /**
   * Concurrent graph implementation
@@ -83,7 +84,9 @@ class ConcurrentDirectedGraph[F[_], V, E](
     * @return
     *
     */
-  def eval(p: MasterPlan): F[Map[NodeRef, Iterable[V]]] = {
+  def evalToMatrix(
+      p: MasterPlan
+  ): F[Map[NodeRef, BlockingMatrix[F, Boolean]]] = {
 
     def foldPlan(plan: BasicPlan): F[BlockingMatrix[F, Boolean]] = plan match {
       case Expand(NodeLoad(leftNode), NodeLoad(rightNode), name, false) =>
@@ -111,32 +114,29 @@ class ConcurrentDirectedGraph[F[_], V, E](
           }
           res <- BlockingMatrix.fromGrBMatrix(resMat)
         } yield res
-      case _ => F.raiseError(???)
+      case _ => F.raiseError(new NotImplementedError)
     }
 
-    p.plans.toVector.foldLeftM(Map.empty[NodeRef, Iterable[V]]) {
+    p.plans.toVector.foldLeftM(Map.empty[NodeRef, BlockingMatrix[F, Boolean]]) {
       case (acc, (key, plan)) =>
-        foldPlan(plan)
-          .flatMap(outMat =>
-            F.bracket(F.pure(outMat))(_.use(_.extract))(_.release)
-          )
-          .flatMap {
-            case (_, nodeIndices, _) =>
-              nodeIndices.toVector
-                .foldLeftM(Vector.newBuilder[V]) { (b, id) =>
-                  val x: F[mutable.Builder[V, Vector[V]]] =
-                    ds.getV(id).map(b ++= _)
-                  x
-                }
-                .map((b: mutable.Builder[V, Vector[V]]) =>
-                  acc + (key -> b.result)
-                )
-          }
+        foldPlan(plan).map(m => acc + (key -> m))
+    }
+  }
+
+  /**
+    *
+    * Scan over a blocking matrix and return nodes
+    * @param m
+    */
+  def scanNodes(m: BlockingMatrix[F, Boolean]): fs2.Stream[F, V] = {
+    m.toStream().flatMap {
+      case (_, js, _) =>
+        fs2.Stream
+          .eval(ds.getVs(js))
+          .flatMap(arr => fs2.Stream.chunk(Chunk.array(arr)))
     }
   }
 }
-
-
 
 class LabelledMatrices[F[_]](
     private[graph] val mats: ConcurrentHashMap[
@@ -178,7 +178,8 @@ object LabelledMatrices {
 
 object ConcurrentDirectedGraph {
   def apply[F[_]: Parallel: Concurrent, V, E](
-      implicit G: GRB
+      implicit G: GRB,
+      CT: ClassTag[V]
   ): Resource[F, ConcurrentDirectedGraph[F, V, E]] =
     for {
       edges <- BlockingMatrix[F, Boolean](16, 16)

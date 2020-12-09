@@ -41,7 +41,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
         src <- g.insertVertex(a)
         dst <- g.insertVertex(b)
         _ <- g.insertEdge(src, dst, new X)
-        out <- g.eval(
+        out <- g.evalToMatrix(
           MasterPlan(
             Map(
               NodeRef(bTag) -> Expand(
@@ -53,11 +53,8 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
             )
           )
         )
-        _ <- IO.delay {
-          val (_, actual: Iterable[Vertex]) = out.head
-          assertEquals(actual.toVector, Vector(b))
-        }
-      } yield b
+      bNodes <- g.scanNodes(out(NodeRef(bTag))).compile.toVector
+      } yield assertEquals(bNodes, Vector(b))
     }
 
   }
