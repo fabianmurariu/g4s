@@ -11,56 +11,6 @@ import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
 class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
 
-  property("extract top row of matrix") {
-    forAll { mt: MatrixTuples[Boolean] =>
-      val (is, js, vs) = tuples(mt)
-      val io = GrBMatrix
-        .fromTuples[IO, Boolean](mt.rows, mt.cols)(is, js, vs)
-        .use { mat =>
-          GrBMatrix[IO, Boolean](1, mt.cols).use { into =>
-            val sel = mat(0L until 1L, 0L until mt.cols)
-            (for {
-                      m_shape <- into.shape
-                      sel_shap <- sel.show()
-                    } yield println(s"set $sel_shap into $m_shape")) *> into .set(sel).flatMap(_.extract)
-          }
-
-        }
-
-        io.unsafeRunSync()
-        true
-    }
-  }
-  // test("4x4 matrix, select the upper half") {
-
-  //   val mt = MatrixTuples[Boolean](
-  //     4,
-  //     4,
-  //     Vector(
-  //       (0, 0, true),
-  //       (1, 1, true),
-  //       (2, 2, true),
-  //       (3, 3, true)
-  //     )
-  //   )
-
-  //   val (is, js, vs) = tuples(mt)
-
-  //   val io: IO[Unit] = (for {
-  //     a <- Matrix.fromTuples[IO, Boolean](mt.rows, mt.cols)(is, js, vs)
-  //     c <- Matrix[IO, Boolean](2, 4)
-  //     _ <- Resource.liftF(c.extract(0 until 1, 0 until 3)(from = a))
-  //     _ <- Resource.liftF(a.resize(2, 4))
-  //     check <- Resource.liftF(c.isEq(a))
-  //   } yield check).use(c =>
-  //     IO {
-  //       assertEquals(c, true)
-  //     }
-  //   )
-
-  //   io.unsafeRunSync()
-  // }
-
   extract[Boolean]
   extract[Byte]
   extract[Short]

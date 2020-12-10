@@ -11,7 +11,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
   MxM,
   SparseMatrixHandler
 }
-import com.github.fabianmurariu.g4s.sparse.grbv2.{GrBMatrix, MatrixSelection}
+import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import com.github.fabianmurariu.g4s.traverser._
 
 import java.util.concurrent.ConcurrentHashMap
@@ -96,9 +96,6 @@ class ConcurrentDirectedGraph[F[_], V, E](
           a <- nodeLabels.getOrCreate(leftNode)
           b <- nodeLabels.getOrCreate(rightNode)
           e <- edgeTypes.getOrCreate(name)
-          _ <- a.use(_.show().map(println))
-          _ <- b.use(_.show().map(println))
-          _ <- e.use(_.show().map(println))
           size <- e.use(_.nrows)
           out <- F.delay(GrBMatrix.unsafe[F, Boolean](size, size))
           resMat <- a.use { aMat =>
@@ -130,10 +127,8 @@ class ConcurrentDirectedGraph[F[_], V, E](
     */
   def scanNodes(m: BlockingMatrix[F, Boolean]): fs2.Stream[F, V] = {
     m.toStream().flatMap {
-      case (_, js, _) =>
-        fs2.Stream
-          .eval(ds.getVs(js))
-          .flatMap(arr => fs2.Stream.chunk(Chunk.array(arr)))
+      case (_, js, _) => fs2.Stream.eval(ds.getVs(js))
+      .flatMap(arr => fs2.Stream.chunk(Chunk.array(arr)))
     }
   }
 }
@@ -178,8 +173,7 @@ object LabelledMatrices {
 
 object ConcurrentDirectedGraph {
   def apply[F[_]: Parallel: Concurrent, V, E](
-      implicit G: GRB,
-      CT: ClassTag[V]
+      implicit G: GRB, CT: ClassTag[V]
   ): Resource[F, ConcurrentDirectedGraph[F, V, E]] =
     for {
       edges <- BlockingMatrix[F, Boolean](16, 16)

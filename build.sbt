@@ -1,7 +1,7 @@
 ThisBuild / scalaVersion := "2.12.11"
 ThisBuild / organization := "com.github.fabianmurariu"
 
-val grbVersion = "0.1.20"
+val grbVersion = s"0.1.21-${sys.props("os.name").toLowerCase()}"
 
 lazy val commonSettings = Seq(
   scalacOptions in (Compile, console) --= Seq(
