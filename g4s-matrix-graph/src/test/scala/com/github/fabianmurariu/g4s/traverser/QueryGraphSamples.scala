@@ -20,6 +20,17 @@ trait QueryGraphSamples {
       _ <- edge[Y](b, c)
     } yield ()
 
+  def Av_X_Bv_Y_Cv_Z_Dv =
+    for {
+      a <- node[Av]
+      b <- node[Bv]
+      c <- node[Cv]
+      d <- node[Dv]
+      _ <- edge[X](a, b)
+      _ <- edge[Y](b, c)
+      _ <- edge[Z](c, d)
+    } yield ()
+
   def Av_X_Bv_and_Av_Y_Cv =
     for {
       a <- node[Av]
@@ -52,4 +63,5 @@ trait QueryGraphSamples {
   val eTag = implicitly[TypeTag[Ev]].tpe.toString
   val xTag = implicitly[TypeTag[X]].tpe.toString
   val yTag = implicitly[TypeTag[Y]].tpe.toString
+  val zTag = implicitly[TypeTag[Z]].tpe.toString
 }

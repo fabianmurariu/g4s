@@ -1,11 +1,14 @@
 package com.github.fabianmurariu.g4s.graph
 
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
+import cats.implicits._
 import munit.ScalaCheckSuite
 import org.scalacheck.Prop._
 import com.github.fabianmurariu.g4s.sparse.grbv2.MatrixTuples
 import cats.effect.IO
 import scala.concurrent.ExecutionContext
+import cats.effect.Resource
+import cats.effect.concurrent.Ref
 
 class BlockingMatrixTest extends ScalaCheckSuite {
 
@@ -61,7 +64,8 @@ class BlockingMatrixTest extends ScalaCheckSuite {
   }
 
   def testBlock(mt: MatrixTuples[Boolean], pageSize: Long) = {
-    BlockingMatrix[IO, Boolean](mt.rows, mt.cols).use { bm =>
+    Resource.liftF(Ref.of[IO, (Long, Long)]((mt.rows, mt.cols))).
+       >>= (BlockingMatrix[IO, Boolean](_)).use { bm =>
       for {
         _ <- bm.use(_.set(mt.tuples))
         expected <- bm.use(_.extract)

@@ -2,145 +2,122 @@ package com.github.fabianmurariu.g4s.traverser
 
 class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
-  test("plan expand (a)-[:X]->(b)-[:Y]-(c)") {
-
-    val qg = eval(Av_X_Bv_Y_Cv)
-
-    val a = NodeLoad(aTag)
-    val b = NodeLoad(bTag)
-    val c = NodeLoad(cTag)
-
-    val axb = Expand(from = a, to = b, xTag, false)
-
-    val axbEdge = EdgeRef(xTag, NodeRef(aTag), NodeRef(bTag))
-    val bxcEdge = EdgeRef(yTag, NodeRef(bTag), NodeRef(cTag))
-
-    val actual = Plan.expand(qg, Set(NodeRef(cTag)))(
-      Set(axbEdge) -> axb
-    )
-
-    val expected = Seq(
-      Set(axbEdge, bxcEdge) -> MasterPlan(
-        Map(
-          NodeRef(cTag) -> Expand(
-            from = a,
-            to = Expand(from = b, to = c, yTag, false),
-            xTag,
-            false
-          )
-        )
-      )
-    )
-
-    assertEquals(actual, expected)
-  }
-
-  test("plan join (a)-[:X]->(b) , (b)-[:Y]->(c)") {
-    val a = NodeLoad("a")
-    val b = NodeLoad("b")
-    val c = NodeLoad("c")
-
-    val left = Expand(from = a, to = b, "X", false)
-    val right = Expand(from = b, to = c, "Y", false)
-
-    val coverLeft = Set(EdgeRef("X", NodeRef("a"), NodeRef("b")))
-    val coverRight = Set(EdgeRef("Y", NodeRef("b"), NodeRef("c")))
-
-    val actual = Plan.join(Set(NodeRef("c")))(
-      coverLeft -> left,
-      coverRight -> right
-    )
-
-    val expected = Option(
-      (coverLeft ++ coverRight) -> Expand(
-        from = a,
-        to = Expand(
-          from = b,
-          to = c,
-          name = "Y",
-          transpose = false
-        ),
-        name = "X",
-        transpose = false
-      )
-    )
-
-    assertEquals(actual, expected)
-  }
-
-  test("plan single edge out (a) -[:X]-> (b) return b") {
+  test("plan for (a)-[:X]->(b) return b") {
     val qg = eval(singleEdge_Av_X_Bv)
 
-    val ref = NodeRef(bTag)
-    val actual = Plan.fromQueryGraph(qg, ref)
-    val expected = MasterPlan(
-      Map(
-        ref -> Expand(
-          NodeLoad(aTag),
-          NodeLoad(bTag),
-          xTag,
-          false
-        )
-      )
-    )
+    val bRef = NodeRef(bTag)
 
-    assertEquals(actual, expected)
-    // now eval the plan
-    val algPlan = Plan.eval(actual).mapValues(_.algStr)
-
-    assertEquals(algPlan, Map(ref -> "Av*X*Bv"))
+    val actual = LogicalPlan.compilePlan(qg)(bRef)
+    assertEquals(actual.show, out(aTag, xTag, bTag))
   }
 
-  test("plan single edge out (a) -[:X]-> (b) return a") {
+  test("plan for (a)-[:X]->(b) return a") {
     val qg = eval(singleEdge_Av_X_Bv)
 
-    val ref = NodeRef(aTag)
-    val actual = Plan.fromQueryGraph(qg, ref)
-    val expected = MasterPlan(
-      Map(
-        ref -> Expand(
-          NodeLoad(bTag),
-          NodeLoad(aTag),
-          xTag,
-          true
-        )
-      )
-    )
+    val aRef = NodeRef(aTag)
 
-    assertEquals(actual, expected)
-    // now eval the plan
-    val algPlan = Plan.eval(actual).mapValues(_.algStr)
+    val actual = LogicalPlan.compilePlan(qg)(aRef)
 
-    assertEquals(algPlan, Map(ref -> "Bv*T(X)*Av"))
+    assertEquals(actual.show, in(bTag, xTag, aTag))
   }
 
-  test("plan 2 edge out (a) -[:X]-> (b) -[:Y]-> (c) return c") {
-    val qg = eval(Av_X_Bv_Y_Cv)
+  test("plan for (a)-[:X]->(b) should have 2 plans for A and B") {
 
-    val ref = NodeRef(cTag)
-    val actual = Plan.fromQueryGraph(qg, ref)
-    val expected = MasterPlan(
-      Map(
-        ref ->
-          Expand(
-            from = NodeLoad(aTag),
-            to = Expand(
-              NodeLoad(bTag),
-              NodeLoad(cTag),
-              yTag,
-              transpose = false
-            ),
-            xTag,
-            transpose = false
-          )
-      )
+    val aRef = NodeRef(aTag)
+    val bRef = NodeRef(bTag)
+    val qg = eval(singleEdge_Av_X_Bv)
+
+    val allOut = Set(bRef, aRef)
+
+    val actual = LogicalPlan.compilePlans(qg)(allOut)
+
+    val aPlan = actual(aRef -> None)
+    val bPlan = actual(bRef -> None)
+
+
+    assertEquals(bPlan.show, out(aTag, xTag, bTag))
+    assertEquals(aPlan.show, in(bTag, xTag, aTag))
+  }
+
+  test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for c") {
+    val qg = eval(Av_X_Bv_Y_Cv)
+    val cRef = NodeRef(cTag)
+
+    val actual = LogicalPlan.compilePlan(qg)(cRef)
+
+    assertEquals(
+      actual.show,
+      out(out(aTag, xTag, bTag), yTag, cTag)
+    )
+  }
+
+  test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for c, b") {
+    val qg = eval(Av_X_Bv_Y_Cv)
+    val cRef = NodeRef(cTag)
+    val bRef = NodeRef(bTag)
+
+    val bindings = LogicalPlan.emptyBindings
+
+    val actual = LogicalPlan.compilePlans(qg, bindings)(Set(cRef, bRef))
+
+    bindings.mapValues(_.show).foreach(println)
+
+    val cPlan = actual(cRef -> None)
+    val bPlan = actual(bRef -> None)
+
+    assertEquals(
+      cPlan.show,
+      out(out(aTag, xTag, bTag), yTag, cTag)
     )
 
-    assertEquals(actual, expected)
-    // now eval the plan
-    val algPlan = Plan.eval(actual).mapValues(_.algStr)
+    assertEquals(
+      bPlan.show,
+      in(cTag, yTag, out(aTag, xTag, bTag))
+    )
+  }
 
-    assertEquals(algPlan, Map(ref -> "Av*X*Bv*Y*Cv"))
+  test("plan for (a)-[:X]->(b)-[:Y]->(c)-[:Z]->(d) should have plans for d") {
+    val qg = eval(Av_X_Bv_Y_Cv_Z_Dv)
+    val dRef = NodeRef(dTag)
+
+    val bindings = LogicalPlan.emptyBindings
+
+    val actual = LogicalPlan.compilePlans(qg, bindings)(Set(dRef))
+
+    bindings.mapValues(_.show).foreach(println)
+
+    val dPlan = actual(dRef -> None)
+
+    assertEquals(
+      dPlan.show,
+      out(out(out(aTag, xTag, bTag), yTag, cTag), zTag, dTag)
+    )
+  }
+
+  test("plan for (a)-[:X]->(b)-[:Y]->(c)-[:Z]->(d) should have plans for c") {
+    val qg = eval(Av_X_Bv_Y_Cv_Z_Dv)
+    val cRef = NodeRef(cTag)
+
+    val bindings = LogicalPlan.emptyBindings
+
+    val actual = LogicalPlan.compilePlans(qg, bindings)(Set(cRef))
+
+    bindings.mapValues(_.show).foreach(println)
+
+    val cPlan = actual(cRef -> None)
+
+    assertEquals(
+      cPlan.show,
+      in(dTag, zTag, out(out(aTag, xTag, bTag), yTag, cTag))
+    )
+  }
+
+  def out(src: String, name: String, dst: String): String = {
+    s"(${src})-[:$name]->(${dst})"
+  }
+
+  def in(src: String, name: String, dst: String): String = {
+    s"(${src})<-[:$name]-(${dst})"
   }
 
 }

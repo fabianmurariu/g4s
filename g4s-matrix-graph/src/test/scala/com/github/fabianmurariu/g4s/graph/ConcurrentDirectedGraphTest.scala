@@ -1,9 +1,11 @@
 package com.github.fabianmurariu.g4s.graph
 
+import cats.implicits._
 import cats.effect.IO
 import com.github.fabianmurariu.g4s.IOSupport
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import com.github.fabianmurariu.g4s.traverser._
+import scala.util.Random
 
 class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
 
@@ -32,30 +34,19 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       } yield assertEquals(aOut, Some(av))
     }
   }
-  
-  test("insert 2 nodes with one edge and traverse the edge from (a)-[X]->(b)") {
-    val a = new Av
-    val b = new Bv
-    graph.use { g =>
-      for {
-        src <- g.insertVertex(a)
-        dst <- g.insertVertex(b)
-        _ <- g.insertEdge(src, dst, new X)
-        out <- g.evalToMatrix(
-          MasterPlan(
-            Map(
-              NodeRef(bTag) -> Expand(
-                NodeLoad(aTag),
-                NodeLoad(bTag),
-                xTag,
-                transpose = false
-              )
-            )
-          )
-        )
-      bNodes <- g.scanNodes(out(NodeRef(bTag))).compile.toVector
-      } yield assertEquals(bNodes, Vector(b))
-    }
 
+  test("insert 3000 nodes") {
+    graph.use { g =>
+      val nodes = (0 until 3000).map(_ => Random.nextInt(5)).map {
+        case 0 => new Av
+        case 1 => new Bv
+        case 2 => new Cv
+        case 3 => new Dv
+        case 4 => new Ev
+      }.toVector
+
+      nodes.traverse[IO, Long](g.insertVertex(_))
+    }
   }
+  
 }

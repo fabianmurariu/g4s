@@ -1,7 +1,13 @@
 package com.github.fabianmurariu.g4s.traverser
 
 import cats.data.State
-import com.github.fabianmurariu.g4s.ops.{Edges, GraphMatrixOp, MatMul, Nodes, Transpose}
+import com.github.fabianmurariu.g4s.ops.{
+  Edges,
+  GraphMatrixOp,
+  MatMul,
+  Nodes,
+  Transpose
+}
 
 import scala.collection.immutable.Queue
 import scala.collection.mutable
@@ -66,6 +72,9 @@ object Traverser {
 
     def neighbours(v: NodeRef) =
       out(v) ++ in(v)
+
+    def edges:Set[EdgeRef] =
+      qg.values.flatMap(e => e.in ++ e.out).toSet
 
     def dfs(v: NodeRef) = {
       val out = mutable.Map[NodeRef, Option[NodeRef]](v -> None)
@@ -144,50 +153,6 @@ object Traverser {
         .maxBy(_.length)
     }
 
-    /**
-      * Transform the Query graph into matrix operations
-      */
-    def compile: Either[QGCompileError, GraphMatrixOp] = {
-      if (qg.size <= 1) {
-        Left(MinNodeGraphError)
-      } else {
-
-        val path = qg.longestPath
-        println(s"Longest path -> ${path}")
-        val (e, p) = path.dequeue
-        val algOp = MatMul(
-          left = MatMul(
-            left = Nodes(e.src.name),
-            right = Edges(e.name)
-          ),
-          right = Nodes(e.dst.name)
-        )
-        // e.dst is used to check if the next edge points into the dest (dst <-) or out of it (dst ->)
-        val (_, op) = p.foldLeft((e.dst, algOp)) {
-          case ((lastDst, op), nextE)
-              if nextE.src == lastDst => //we're pointed out ->
-            val nextOp = MatMul(
-              left = MatMul(
-                left = op,
-                right = Edges(nextE.name)
-              ),
-              right = Nodes(nextE.dst.name)
-            )
-            nextE.dst -> nextOp
-          case ((lastDst, op), nextE)
-              if nextE.dst == lastDst => //we're pointed out <-
-            val nextOp = MatMul(
-              left = MatMul(
-                left = op,
-                right = Transpose(Edges(nextE.name))
-              ),
-              right = Nodes(nextE.src.name)
-            )
-            nextE.src -> nextOp
-        }
-        Right(op)
-      }
-    }
 
     /**
       * Starting from n:NodeRef create the matrix operation tree
@@ -220,61 +185,6 @@ object Traverser {
 
     type Plan = (Set[NodeRef], GraphMatrixOp)
 
-    def plan: GraphMatrixOp = {
-
-      def canJoin(p1: Plan, p2: Plan): Boolean = {
-        false
-      }
-
-      def join(p1: Plan, p2: Plan): Option[Plan] = {
-        None
-      }
-
-      def expandPlan(p: Plan): Seq[Plan] =
-        Seq.empty
-
-      def cost(p: Plan): Int =
-        p._2.cost
-
-      def contains(p1: Plan, p: Plan): Boolean = {
-        p._1.subsetOf(p1._1)
-      }
-
-      var planTable: Map[Set[NodeRef], GraphMatrixOp] =
-        qg.keys.map(qn => Set(qn) -> Nodes(qn.name)).toMap
-
-      var candidates: Vector[Plan] = Vector()
-
-      do {
-
-        for (p1 <- planTable) {
-          for (p2 <- planTable) {
-            join(p1, p2) match {
-              case None =>
-              case Some(p1join2) =>
-                candidates = candidates :+ p1join2
-            }
-          }
-        }
-
-        planTable.flatMap(plan => expandPlan(plan)).foreach { p: Plan =>
-          candidates = candidates :+ p
-        }
-
-        if (candidates.length >= 1) {
-          val bestPlan = candidates.minBy(cost)
-          for (plan <- planTable.iterator) {
-            if (contains(bestPlan, plan)) {
-              planTable = planTable - plan._1
-            }
-          }
-
-        }
-      } while (candidates.length >= 1)
-
-      planTable.head._2
-
-    }
   }
 
   case class Path[T](path: List[T], seen: Set[T], orig: NodeRef)
@@ -283,4 +193,9 @@ object Traverser {
   object MinNodeGraphError
       extends RuntimeException("Cannot process query with 1 or less nodes")
       with QGCompileError
+
+  class EdgeNotAttachedToPlan(e: EdgeRef)
+      extends RuntimeException(s"Edge ${e} not attached to plan")
+      with QGCompileError
+
 }
