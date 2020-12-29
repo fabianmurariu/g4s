@@ -1,4 +1,4 @@
-package com.github.fabianmurariu.g4s.traverser
+package fix
 
 sealed trait Relation
 class X extends Relation

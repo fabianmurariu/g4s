@@ -16,8 +16,8 @@ sealed abstract class PlanStep { self =>
 }
 
 case class LoadNodes(ref: NodeRef) extends PlanStep
-case class Binding2(key: (NodeRef, Option[EdgeRef]))(
-    cache: mutable.Map[(NodeRef, Option[EdgeRef]), PlanStep]
+case class Binding2(key: (NodeRef, Set[EdgeRef]))(
+    cache: mutable.Map[(NodeRef, Set[EdgeRef]), PlanStep]
 ) extends PlanStep {
   def lookUp: PlanStep = cache(key)
 
@@ -40,7 +40,7 @@ class LogicalPlan(
 
 object LogicalPlan {
 
-  type Key = (NodeRef, Option[EdgeRef])
+  type Key = (NodeRef, Set[EdgeRef])
   type Bindings = mutable.Map[Key, PlanStep]
 
   def emptyBindings: Bindings = mutable.Map.empty
@@ -48,41 +48,42 @@ object LogicalPlan {
   def compilePlan(
       qg: mutable.Map[NodeRef, QGEdges],
       cache: Bindings = mutable.Map.empty,
-      exclude: Option[EdgeRef] = None
+      exclude: Set[EdgeRef] = Set.empty
   )(sel: NodeRef): PlanStep = {
 
+    val neighbours = qg.neighbours(sel).toSet
     // get all the subtrees
-    val subTrees: Iterable[Expand] = qg
-      .neighbours(sel)
-      .filterNot(e => exclude.contains(e))
-      .map {
-        case e @ EdgeRef(name, src, dst) if (dst == sel) =>
-          val key = (src, Option(e))
-          // attempt to get it from cache or recursivelly compile
-          cache
-            .get(key) match {
-              case None    =>
-                val p = compilePlan(qg, cache, Option(e))(src)
-                // println(s"Computed ${p.show} for $sel on $key")
-            case Some(p) =>
-                // println(s"Found ${p.show} for $sel on $key")
-                p
+    val subTrees: Set[((NodeRef, Set[EdgeRef]), Expand)] = neighbours
+      .filterNot(exclude)
+      .map { edge =>
+        val edgePlanKey = (sel, (exclude ++ ((neighbours -- exclude) - edge)))
+
+        val plan = cache
+          .get(edgePlanKey)
+        
+          plan.collect { case e: Expand => edgePlanKey -> e }
+          .getOrElse {
+
+            val edgePlan = edge match {
+              case e @ EdgeRef(name, src, dst) if dst == sel =>
+                val subPlanKey = (src, Set(e))
+                // attempt to get it from cache or recursivelly compile
+                cache.getOrElse(subPlanKey, compilePlan(qg, cache, Set(e))(src))
+
+                // the key for this subplan is (neighbours - (exclude + e))
+                Expand(Binding2(subPlanKey)(cache), name, LoadNodes(sel), transpose = false)
+
+              case e @ EdgeRef(name, src, dst) if src == sel =>
+                val subPlanKey = (dst, Set(e))
+                cache.getOrElse(subPlanKey, compilePlan(qg, cache, Set(e))(dst))
+
+                Expand(Binding2(subPlanKey)(cache), name, LoadNodes(sel), transpose = true)
+            }
+
+            cache += (edgePlanKey -> edgePlan)
+            edgePlanKey -> edgePlan
           }
 
-          Expand(Binding2(key)(cache), name, LoadNodes(sel), false)
-        case e @ EdgeRef(name, src, dst) if (src == sel) =>
-          val key = (dst, Option(e))
-          cache
-            .get(key) match {
-              case None    =>
-                val p = compilePlan(qg, cache, Option(e))(dst)
-                // println(s"Computed ${p.show} for $sel on $key")
-              case Some(p) =>
-                // println(s"Found ${p.show} for $sel on $key")
-                p
-          }
-
-          Expand(Binding2(key)(cache), name, LoadNodes(sel), true)
       }
 
     // compute the plan
@@ -100,12 +101,17 @@ object LogicalPlan {
     plan
   }
 
+//  def attachP1RightOfP2(parentKey: (NodeRef, Set[EdgeRef]), bindings: Bindings)
+//                       (p1: ((NodeRef, Set[EdgeRef]), PlanStep), p2: ((NodeRef, Set[EdgeRef]), PlanStep)) = p2 match {
+//    case (_, e@Expand(_, _, to:LoadNodes, _)) => (parentKey, e.copy(to = Binding2(p1._1)(bindings)))
+//    case (_, e@Expand(_, _, to: Binding2, _)) => (parentKey, )
+//  }
+  
   def compilePlans(
       qg: mutable.Map[NodeRef, QGEdges],
-      cache: mutable.Map[(NodeRef, Option[EdgeRef]), PlanStep] =
-        mutable.Map.empty,
-      exclude: Option[EdgeRef] = None
-  )(sel: Set[NodeRef]): mutable.Map[(NodeRef, Option[EdgeRef]), PlanStep] = {
+      cache: Bindings = mutable.Map.empty,
+      exclude: Set[EdgeRef] = Set.empty
+  )(sel: Set[NodeRef]): Bindings = {
     sel.foldLeft(cache) { (c, out) =>
       compilePlan(qg, c, exclude)(out)
       c

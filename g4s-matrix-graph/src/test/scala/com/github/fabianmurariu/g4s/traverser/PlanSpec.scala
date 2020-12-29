@@ -5,112 +5,171 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
   test("plan for (a)-[:X]->(b) return b") {
     val qg = eval(singleEdge_Av_X_Bv)
 
-    val bRef = NodeRef(bTag)
+    val bRef = NodeRef(b)
 
     val actual = LogicalPlan.compilePlan(qg)(bRef)
-    assertEquals(actual.show, out(aTag, xTag, bTag))
+    assertEquals(actual.show, out(a, X, b))
   }
 
   test("plan for (a)-[:X]->(b) return a") {
     val qg = eval(singleEdge_Av_X_Bv)
 
-    val aRef = NodeRef(aTag)
+    val aRef = NodeRef(a)
 
     val actual = LogicalPlan.compilePlan(qg)(aRef)
 
-    assertEquals(actual.show, in(bTag, xTag, aTag))
+    assertEquals(actual.show, in(b, X, a))
   }
 
-  test("plan for (a)-[:X]->(b) should have 2 plans for A and B") {
+  test("plan for (a)-[:X]->(b) should have 2 plans for a and b") {
 
-    val aRef = NodeRef(aTag)
-    val bRef = NodeRef(bTag)
+    val aRef = NodeRef(a)
+    val bRef = NodeRef(b)
     val qg = eval(singleEdge_Av_X_Bv)
 
     val allOut = Set(bRef, aRef)
 
     val actual = LogicalPlan.compilePlans(qg)(allOut)
 
-    val aPlan = actual(aRef -> None)
-    val bPlan = actual(bRef -> None)
+    val aPlan = actual(aRef -> Set.empty)
+    val bPlan = actual(bRef -> Set.empty)
 
 
-    assertEquals(bPlan.show, out(aTag, xTag, bTag))
-    assertEquals(aPlan.show, in(bTag, xTag, aTag))
+    assertEquals(bPlan.show, out(a, X, b))
+    assertEquals(aPlan.show, in(b, X, a))
+  }
+  
+  test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for b and subplans") {
+    val qg = eval(Av_X_Bv_Y_Cv)
+    val bRef = NodeRef(b)
+    val aRef = NodeRef(a)
+   
+    val axb = qg.out(aRef).head
+    val byc = qg.out(bRef).head
+    
+    val bindings = LogicalPlan.emptyBindings
+    
+    val actual = LogicalPlan.compilePlan(qg, bindings)(bRef)
+
+    // component parts of b
+    assertEquals(
+      bindings(bRef -> Set(axb)).show,
+      in(c, Y, b)
+    )
+    
+    assertEquals(
+      bindings(bRef -> Set(byc)).show,
+      out(a, X, b)
+    )
+    
+    assertEquals(
+      actual.show,
+        in(c, Y, out(a, X, b))
+    )
   }
 
+  test("plan for (a)-[:X]->(b)-[:Y]->(c),(d)-[:Z]->(b) should have plans for b and subplans") {
+    val qg = eval(Av_X_Bv_Y_Cv_and_Dv_Z_Bv)
+    val bRef = NodeRef(b)
+    val aRef = NodeRef(a)
+    val dRef = NodeRef(d)
+
+    val axb = qg.out(aRef).head
+    val byc = qg.out(bRef).head
+    val dzb = qg.out(dRef).head
+
+    val bindings = LogicalPlan.emptyBindings
+
+    val actual = LogicalPlan.compilePlan(qg, bindings)(bRef)
+
+    // component parts of b
+    assertEquals(
+      bindings(bRef -> Set(axb, dzb)).show,
+      in(c, Y, b)
+    )
+
+    assertEquals(
+      bindings(bRef -> Set(byc, dzb)).show,
+      out(a, X, b)
+    )
+
+    assertEquals(
+      bindings(bRef -> Set(axb, byc)).show,
+      out(d, Z, b)
+    )
+    
+    assertEquals(
+      actual.show,
+      in(c, Y, out(a, X, out(d, Z, b)))
+    ) 
+  }
+  
   test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for c") {
     val qg = eval(Av_X_Bv_Y_Cv)
-    val cRef = NodeRef(cTag)
+    val cRef = NodeRef(c)
 
     val actual = LogicalPlan.compilePlan(qg)(cRef)
 
     assertEquals(
       actual.show,
-      out(out(aTag, xTag, bTag), yTag, cTag)
+      out(out(a, X, b), Y, c)
     )
   }
 
   test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for c, b") {
     val qg = eval(Av_X_Bv_Y_Cv)
-    val cRef = NodeRef(cTag)
-    val bRef = NodeRef(bTag)
+    val cRef = NodeRef(c)
+    val bRef = NodeRef(b)
 
     val bindings = LogicalPlan.emptyBindings
 
     val actual = LogicalPlan.compilePlans(qg, bindings)(Set(cRef, bRef))
-
-    bindings.mapValues(_.show).foreach(println)
-
-    val cPlan = actual(cRef -> None)
-    val bPlan = actual(bRef -> None)
+    
+    val cPlan = actual(cRef -> Set.empty)
+    val bPlan = actual(bRef -> Set.empty)
 
     assertEquals(
       cPlan.show,
-      out(out(aTag, xTag, bTag), yTag, cTag)
+      out(out(a, X, b), Y, c)
     )
 
     assertEquals(
       bPlan.show,
-      in(cTag, yTag, out(aTag, xTag, bTag))
+      in(c, Y, out(a, X, b))
     )
   }
 
-  test("plan for (a)-[:X]->(b)-[:Y]->(c)-[:Z]->(d) should have plans for d") {
-    val qg = eval(Av_X_Bv_Y_Cv_Z_Dv)
-    val dRef = NodeRef(dTag)
+   test("plan for (a)-[:X]->(b)-[:Y]->(c)-[:Z]->(d) should have plans for d") {
+     val qg = eval(Av_X_Bv_Y_Cv_Z_Dv)
+     val dRef = NodeRef(d)
 
-    val bindings = LogicalPlan.emptyBindings
+     val bindings = LogicalPlan.emptyBindings
 
-    val actual = LogicalPlan.compilePlans(qg, bindings)(Set(dRef))
+     val actual = LogicalPlan.compilePlans(qg, bindings)(Set(dRef))
 
-    bindings.mapValues(_.show).foreach(println)
+     val dPlan = actual(dRef -> Set.empty)
 
-    val dPlan = actual(dRef -> None)
+     assertEquals(
+       dPlan.show,
+       out(out(out(a, X, b), Y, c), Z, d)
+     )
+   }
 
-    assertEquals(
-      dPlan.show,
-      out(out(out(aTag, xTag, bTag), yTag, cTag), zTag, dTag)
-    )
-  }
+   test("plan for (a)-[:X]->(b)-[:Y]->(c)-[:Z]->(d) should have plans for c") {
+     val qg = eval(Av_X_Bv_Y_Cv_Z_Dv)
+     val cRef = NodeRef(c)
 
-  test("plan for (a)-[:X]->(b)-[:Y]->(c)-[:Z]->(d) should have plans for c") {
-    val qg = eval(Av_X_Bv_Y_Cv_Z_Dv)
-    val cRef = NodeRef(cTag)
+     val bindings = LogicalPlan.emptyBindings
 
-    val bindings = LogicalPlan.emptyBindings
+     val actual = LogicalPlan.compilePlans(qg, bindings)(Set(cRef))
 
-    val actual = LogicalPlan.compilePlans(qg, bindings)(Set(cRef))
+     val cPlan = actual(cRef -> Set.empty)
 
-    bindings.mapValues(_.show).foreach(println)
-
-    val cPlan = actual(cRef -> None)
-
-    assertEquals(
-      cPlan.show,
-      in(dTag, zTag, out(out(aTag, xTag, bTag), yTag, cTag))
-    )
-  }
+     assertEquals(
+       cPlan.show,
+       in(d, Z, out(out(a, X, b), Y, c))
+     )
+   }
 
   def out(src: String, name: String, dst: String): String = {
     s"(${src})-[:$name]->(${dst})"
