@@ -63,7 +63,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
     )
     
     assertEquals(
-      actual.show,
+      actual.materialise.show,
         in(c, Y, out(a, X, b))
     )
   }
@@ -99,7 +99,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
     )
     
     assertEquals(
-      actual.show,
+      actual.materialise.show,
       in(c, Y, out(a, X, out(d, Z, b)))
     ) 
   }
@@ -134,7 +134,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
     )
 
     assertEquals(
-      bPlan.show,
+      bPlan.materialise.show,
       in(c, Y, out(a, X, b))
     )
   }
@@ -166,7 +166,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
      val cPlan = actual(cRef -> Set.empty)
 
      assertEquals(
-       cPlan.show,
+       cPlan.materialise.show,
        in(d, Z, out(out(a, X, b), Y, c))
      )
    }
@@ -178,5 +178,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
   def in(src: String, name: String, dst: String): String = {
     s"(${src})<-[:$name]-(${dst})"
   }
-
+  
+  def union(expands: String*): String =
+    expands.mkString("U["," + ", "]")
 }
