@@ -13,11 +13,12 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
 import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import com.github.fabianmurariu.g4s.traverser._
 
-import scala.reflect.runtime.universe.{Traverser => _, _}
+import scala.reflect.runtime.universe.{Traverser => _, Bind => _, _}
 import fs2.Chunk
 import scala.reflect.ClassTag
 import cats.effect.concurrent.Ref
 import com.github.fabianmurariu.g4s.sparse.grb.GrBInvalidIndex
+import scala.collection.mutable
 
 /**
   * Concurrent graph implementation
@@ -33,20 +34,131 @@ class ConcurrentDirectedGraph[F[_], V, E](
     ds: DataStore[F, V, E]
 )(implicit F: Concurrent[F], P: Parallel[F], G: GRB) { self =>
 
+  sealed trait PlanMatrix
+  case class Releasable(g: GrBMatrix[F, Boolean]) extends PlanMatrix
+  case class UnReleasable(g: BlockingMatrix[F, Boolean]) extends PlanMatrix
+  // TODO: the graph should be able to evaluate a traverser object
+  // very likely Traverser will need to be redefined
+  // there could be a sub type of graph supporting only non-FP
+  // access to GrBMatrix without any generics and only with Long indices
+  // that can evaluate PlanStep instead of traverser
+  def evalPlans(ret: NodeRef*)(
+      bindings: LookupTable[cats.Id, PlanStep]
+  ): F[LookupTable[F, BlockingMatrix[F, Boolean]]] = {
+
+    def resolveBinding(from: Bind[cats.Id, PlanStep])(
+        matBindings: LookupTable[F, BlockingMatrix[F, Boolean]]
+    ) = bindings(from.key) match {
+
+      case LValue(rc, plan) if rc <= 1 =>
+        // we should not hold on to the output of this plan
+        matBindings.lookup(from.key).flatMap {
+          case None =>
+            // we compute but do not store, the mat is needed but only once
+            F.delay(bindings.clear(from.key)) *> resolvePlan(plan)(
+              matBindings
+            )
+          case Some(mat) =>
+            F.delay(bindings.clear(from.key)) *> //clear from planning
+              F.suspend(matBindings.clear(from.key)) *> // clear from mat bindings
+              F.pure(mat)
+        }
+
+    }
+
+    /**
+      * go through the plan and resolve matrices
+      * MxM against the semiring at the Expansion points
+      * Only release intermediate results
+      * */
+    def resolvePlan(ps: PlanStep)(
+        matBindings: LookupTable[F, BlockingMatrix[F, Boolean]]
+    ): F[BlockingMatrix[F, Boolean]] = ps match {
+      case Expand(from, tpe, to: PlanStep, transpose) =>
+        F.suspend {
+          bindings(from.key) match {
+            case LValue(rc, plan) if rc <= 1 =>
+              // we should not hold on to the output of this plan
+              val fromGrBMat = matBindings.lookup(from.key).flatMap {
+                case None =>
+                  // we compute but do not store, the mat is needed but only once
+                  F.delay(bindings.clear(from.key)) *> resolvePlan(plan)(
+                    matBindings
+                  )
+                case Some(mat) =>
+                  F.delay(bindings.clear(from.key)) *> //clear from planning
+                    F.suspend(matBindings.clear(from.key)) *> // clear from mat bindings
+                    F.pure(mat)
+              }
+
+              val edgeDirection =
+                if (transpose) edgeTypesTranspose.getOrCreate(tpe)
+                else edgeTypes.getOrCreate(tpe)
+
+              for {
+                edgeB <- edgeDirection
+                toB <- resolvePlan(to)(matBindings)
+                fromB <- fromGrBMat
+                out <- edgeB.use { edge =>
+                  toB.use { to =>
+                    fromB.use { from =>
+                      MxM[F]
+                        .mxm(from)(from, edge)(semiRing, None, None, None) >>= {
+                        res =>
+                          MxM[F].mxm(res)(res, to)(semiRing, None, None, None)
+                      } >>= (m => BlockingMatrix.fromGrBMatrix[F, Boolean](m))
+
+                    }
+                  }
+                }
+              } yield out
+          }
+        }
+      case LoadNodes(ref) =>
+        nodeLabels.getOrCreate(ref.name)
+
+      // case Union(plans) =>
+      //   plans.toStream.map{
+      //     b =>
+      //     bindings(b.key) match {
+
+      //     }
+      //   }
+    }
+
+    for {
+      table <- F.suspend(LookupTable[F, BlockingMatrix[F, Boolean]])
+      _ <- ret.toStream
+        .foldLeftM[F, LookupTable[F, BlockingMatrix[F, Boolean]]](table) {
+          (t, ret) =>
+            val key = LKey(ret, Set.empty)
+            for {
+              binding <- F.delay(bindings(key))
+              LValue(_, plan) = binding
+              _ <- t.lookupOrBuildPlan(key)(resolvePlan(plan)(t))
+            } yield t
+        }
+    } yield table
+
+  }
 
   /**
-   * Only call this inside use block of a [[BlockingMatrix]]
-   * */
-  private def update(src:Long, dst:Long)(mat: GrBMatrix[F, Boolean]):F[Unit] = {
+    * Only call this inside use block of a [[BlockingMatrix]]
+    * */
+  private def update(src: Long, dst: Long)(
+      mat: GrBMatrix[F, Boolean]
+  ): F[Unit] = {
 
-    def loopUpdateAndResize:F[Unit] =
-      mat.set(src, dst, true)
-        .handleErrorWith{case _:GrBInvalidIndex =>
-          (for {
-            matShape <- mat.shape
-            (rows, cols) = matShape
-            _ <- mat.resize(rows * 2, cols * 2)
-          } yield ()) *> loopUpdateAndResize
+    def loopUpdateAndResize: F[Unit] =
+      mat
+        .set(src, dst, true)
+        .handleErrorWith {
+          case _: GrBInvalidIndex =>
+            (for {
+              matShape <- mat.shape
+              (rows, cols) = matShape
+              _ <- mat.resize(rows * 2, cols * 2)
+            } yield ()) *> loopUpdateAndResize
         }
 
     loopUpdateAndResize
@@ -100,16 +212,18 @@ class ConcurrentDirectedGraph[F[_], V, E](
     */
   def scanNodes(m: BlockingMatrix[F, Boolean]): fs2.Stream[F, V] = {
     m.toStream().flatMap {
-      case (_, js, _) => fs2.Stream.eval(ds.getVs(js))
-      .flatMap(arr => fs2.Stream.chunk(Chunk.array(arr)))
+      case (_, js, _) =>
+        fs2.Stream
+          .eval(ds.getVs(js))
+          .flatMap(arr => fs2.Stream.chunk(Chunk.array(arr)))
     }
   }
 }
 
-
 object ConcurrentDirectedGraph {
   def apply[F[_]: Parallel: Concurrent, V, E](
-      implicit G: GRB, CT: ClassTag[V]
+      implicit G: GRB,
+      CT: ClassTag[V]
   ): Resource[F, ConcurrentDirectedGraph[F, V, E]] =
     for {
       size <- Resource.liftF(Ref.of[F, (Long, Long)]((1024L, 1024L)))

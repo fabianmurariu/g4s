@@ -31,9 +31,11 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
     val actual = LogicalPlan.compilePlans(qg)(allOut)
 
-    val aPlan = actual(aRef -> Set.empty)
-    val bPlan = actual(bRef -> Set.empty)
+    val LValue(rca, aPlan) = actual(LKey(aRef, Set.empty))
+    val LValue(rcb, bPlan) = actual(LKey(bRef, Set.empty))
 
+    assertEquals(rca, 0)
+    assertEquals(rcb, 0)
 
     assertEquals(bPlan.show, out(a, X, b))
     assertEquals(aPlan.show, in(b, X, a))
@@ -53,12 +55,12 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
     // component parts of b
     assertEquals(
-      bindings(bRef -> Set(axb)).show,
+      bindings(LKey(bRef, Set(axb))).plan.show,
       in(c, Y, b)
     )
     
     assertEquals(
-      bindings(bRef -> Set(byc)).show,
+      bindings(LKey(bRef, Set(byc))).plan.show,
       out(a, X, b)
     )
     
@@ -84,17 +86,17 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
     // component parts of b
     assertEquals(
-      bindings(bRef -> Set(axb, dzb)).show,
+      bindings(LKey(bRef, Set(axb, dzb))).plan.show,
       in(c, Y, b)
     )
 
     assertEquals(
-      bindings(bRef -> Set(byc, dzb)).show,
+      bindings(LKey(bRef, Set(byc, dzb))).plan.show,
       out(a, X, b)
     )
 
     assertEquals(
-      bindings(bRef -> Set(axb, byc)).show,
+      bindings(LKey(bRef, Set(axb, byc))).plan.show,
       out(d, Z, b)
     )
     
@@ -125,8 +127,18 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
     val actual = LogicalPlan.compilePlans(qg, bindings)(Set(cRef, bRef))
     
-    val cPlan = actual(cRef -> Set.empty)
-    val bPlan = actual(bRef -> Set.empty)
+    val LValue(rcC, cPlan) = actual(LKey(cRef, Set.empty))
+    val LValue(rcB, bPlan) = actual(LKey(bRef, Set.empty))
+
+
+    val byc = qg.out(bRef).head
+
+    val LValue(rcB_without_bYc, _) = bindings(LKey(bRef, Set(byc)))
+
+
+    assertEquals(rcB_without_bYc, 2) // is used in both c and b plans
+    assertEquals(rcC, 0)
+    assertEquals(rcB, 0)
 
     assertEquals(
       cPlan.show,
@@ -147,10 +159,10 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
      val actual = LogicalPlan.compilePlans(qg, bindings)(Set(dRef))
 
-     val dPlan = actual(dRef -> Set.empty)
+     val dPlan = actual(LKey(dRef, Set.empty))
 
      assertEquals(
-       dPlan.show,
+       dPlan.plan.show,
        out(out(out(a, X, b), Y, c), Z, d)
      )
    }
@@ -163,10 +175,10 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
      val actual = LogicalPlan.compilePlans(qg, bindings)(Set(cRef))
 
-     val cPlan = actual(cRef -> Set.empty)
+     val cPlan = actual(LKey(cRef, Set.empty))
 
      assertEquals(
-       cPlan.materialise.show,
+       cPlan.plan.materialise.show,
        in(d, Z, out(out(a, X, b), Y, c))
      )
    }
@@ -178,7 +190,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
   def in(src: String, name: String, dst: String): String = {
     s"(${src})<-[:$name]-(${dst})"
   }
-  
+
   def union(expands: String*): String =
     expands.mkString("U["," + ", "]")
 }

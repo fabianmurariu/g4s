@@ -1,5 +1,11 @@
-# Efectful Graph Library
+# FP Generic Graph Library
 
-The aim of this project is to provide generic typeclasses able to abstarct over directed graphs that can fit in memory as well as graphs with edges on GPUs or suprercomputers. This is done by wrapping [GraphBLAS](http://graphblas.org/index.php?title=Graph_BLAS_Forum) with a thin layer of JNI then exposing these calls via cats-effect. This ensures pointers are released correctly when not needed.
+This project aims to build an pure FP graph over the GraphBLAS standard. 
+GraphBLAS allows for graph operations to run over CPUs, GPUs or HPC.
+
+```sbt
+libraryDependencies += "com.github.fabianmurariu" % "g4s-matrix-graph" % "0.1"
+```
+
 
 For documentation check-out `docs` folder
