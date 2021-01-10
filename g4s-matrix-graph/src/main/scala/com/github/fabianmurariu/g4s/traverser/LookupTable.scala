@@ -39,8 +39,14 @@ class LookupTable[F[_], A](
     }
   }
 
-  def clear(key:LKey):F[Unit] = F.pure{
-    table -= key
+  def decrement(key:LKey):F[Unit] = F.pure{
+    table.get(key) match {
+      case None => ()
+      case Some(LValue(1, _)) =>
+        table -= key
+      case Some(lv@LValue(rc, _)) =>
+        table.update(key, lv.copy(rc = rc - 1))
+    }
   }
 
   def iterator = table.clone().iterator

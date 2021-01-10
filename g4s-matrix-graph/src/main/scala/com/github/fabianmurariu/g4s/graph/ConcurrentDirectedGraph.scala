@@ -18,7 +18,6 @@ import fs2.Chunk
 import scala.reflect.ClassTag
 import cats.effect.concurrent.Ref
 import com.github.fabianmurariu.g4s.sparse.grb.GrBInvalidIndex
-import scala.collection.mutable
 
 /**
   * Concurrent graph implementation
@@ -44,10 +43,10 @@ class ConcurrentDirectedGraph[F[_], V, E](
   // that can evaluate PlanStep instead of traverser
   def evalPlans(ret: NodeRef*)(
       bindings: LookupTable[cats.Id, PlanStep]
-  ): F[LookupTable[F, BlockingMatrix[F, Boolean]]] = {
+  ): F[LookupTable[F, PlanMatrix]] = {
 
     def resolveBinding(from: Bind[cats.Id, PlanStep])(
-        matBindings: LookupTable[F, BlockingMatrix[F, Boolean]]
+        matBindings: LookupTable[F, PlanMatrix]
     ) = bindings(from.key) match {
 
       case LValue(rc, plan) if rc <= 1 =>
@@ -55,16 +54,79 @@ class ConcurrentDirectedGraph[F[_], V, E](
         matBindings.lookup(from.key).flatMap {
           case None =>
             // we compute but do not store, the mat is needed but only once
-            F.delay(bindings.clear(from.key)) *> resolvePlan(plan)(
+            F.delay(bindings.decrement(from.key)) *> resolvePlan(plan)(
               matBindings
             )
           case Some(mat) =>
-            F.delay(bindings.clear(from.key)) *> //clear from planning
-              F.suspend(matBindings.clear(from.key)) *> // clear from mat bindings
+            F.delay(bindings.decrement(from.key)) *> //clear from planning
+              F.suspend(matBindings.decrement(from.key)) *> // clear from mat bindings
               F.pure(mat)
         }
+      case LValue(_, plan) =>
+        // we compute and store this plan since it will be used again
+        matBindings
+          .lookupOrBuildPlan(from.key) {
+            F.delay(bindings.decrement(from.key)) *> resolvePlan(plan)(
+              matBindings
+            )
+          }
+          .flatMap { // do not release this matrix if it will be re-used
+            case Releasable(m) =>
+              BlockingMatrix.fromGrBMatrix(m).map(UnReleasable)
+            case keep: UnReleasable => F.pure(keep)
+          }
 
     }
+
+    def grbEval(
+        output: GrBMatrix[F, Boolean],
+        from: GrBMatrix[F, Boolean],
+        edge: GrBMatrix[F, Boolean],
+        to: GrBMatrix[F, Boolean]
+    ): F[GrBMatrix[F, Boolean]] = {
+      MxM[F]
+        .mxm(output)(from, edge)(semiRing, None, None, None) >>= {
+        res: GrBMatrix[F, Boolean] =>
+          MxM[F].mxm(res)(res, to)(semiRing, None, None, None)
+      }
+    }
+
+    def evalAlgebra(
+        fromPM: PlanMatrix,
+        edgeBM: BlockingMatrix[F, Boolean],
+        toPM: PlanMatrix
+    ): F[PlanMatrix] =
+      (fromPM, toPM) match {
+        case (Releasable(from), Releasable(to)) =>
+          edgeBM
+            .use { edge =>
+              F.bracket(F.pure(to)) {
+                grbEval(from, from, edge, _)
+              }(_.release)
+            }
+            .map(Releasable)
+        case (UnReleasable(fromBM), UnReleasable(toBM)) =>
+          edgeBM.use { edge =>
+            fromBM.use { from =>
+              toBM.use { to =>
+                for {
+                  shape <- to.shape
+                  (rows, cols) = shape
+                  out <- F.delay(GrBMatrix.unsafe[F, Boolean](rows, cols))
+                  output <- grbEval(out, from, edge, to)
+                } yield Releasable(output)
+              }
+            }
+          }
+        case (UnReleasable(fromBM), Releasable(to)) =>
+          edgeBM
+            .use { edge => fromBM.use { from => grbEval(to, from, edge, to) } }
+            .map(Releasable)
+        case (Releasable(from), UnReleasable(toBM)) =>
+          edgeBM
+            .use { edge => toBM.use { to => grbEval(from, from, edge, to) } }
+            .map(Releasable)
+      }
 
     /**
       * go through the plan and resolve matrices
@@ -72,71 +134,40 @@ class ConcurrentDirectedGraph[F[_], V, E](
       * Only release intermediate results
       * */
     def resolvePlan(ps: PlanStep)(
-        matBindings: LookupTable[F, BlockingMatrix[F, Boolean]]
-    ): F[BlockingMatrix[F, Boolean]] = ps match {
-      case Expand(from, tpe, to: PlanStep, transpose) =>
+        matBindings: LookupTable[F, PlanMatrix]
+    ): F[PlanMatrix] = ps match {
+      case Expand(from, tpe, to: LoadNodes, transpose) =>
         F.suspend {
-          bindings(from.key) match {
-            case LValue(rc, plan) if rc <= 1 =>
-              // we should not hold on to the output of this plan
-              val fromGrBMat = matBindings.lookup(from.key).flatMap {
-                case None =>
-                  // we compute but do not store, the mat is needed but only once
-                  F.delay(bindings.clear(from.key)) *> resolvePlan(plan)(
-                    matBindings
-                  )
-                case Some(mat) =>
-                  F.delay(bindings.clear(from.key)) *> //clear from planning
-                    F.suspend(matBindings.clear(from.key)) *> // clear from mat bindings
-                    F.pure(mat)
-              }
+          val fromGrBMat = resolveBinding(from)(matBindings)
 
-              val edgeDirection =
-                if (transpose) edgeTypesTranspose.getOrCreate(tpe)
-                else edgeTypes.getOrCreate(tpe)
+          val edgeDirection =
+            if (transpose) edgeTypesTranspose.getOrCreate(tpe)
+            else edgeTypes.getOrCreate(tpe)
 
-              for {
-                edgeB <- edgeDirection
-                toB <- resolvePlan(to)(matBindings)
-                fromB <- fromGrBMat
-                out <- edgeB.use { edge =>
-                  toB.use { to =>
-                    fromB.use { from =>
-                      MxM[F]
-                        .mxm(from)(from, edge)(semiRing, None, None, None) >>= {
-                        res =>
-                          MxM[F].mxm(res)(res, to)(semiRing, None, None, None)
-                      } >>= (m => BlockingMatrix.fromGrBMatrix[F, Boolean](m))
+          for {
+            edgeB <- edgeDirection
+            toB <- resolvePlan(to)(matBindings)
+            fromB <- fromGrBMat
+            out <- evalAlgebra(fromB, edgeB, toB)
+          } yield out
 
-                    }
-                  }
-                }
-              } yield out
-          }
         }
       case LoadNodes(ref) =>
-        nodeLabels.getOrCreate(ref.name)
+        nodeLabels.getOrCreate(ref.name).map(UnReleasable)
 
-      // case Union(plans) =>
-      //   plans.toStream.map{
-      //     b =>
-      //     bindings(b.key) match {
-
-      //     }
-      //   }
+      case _ => F.raiseError(new NotImplementedError)
     }
 
     for {
-      table <- F.suspend(LookupTable[F, BlockingMatrix[F, Boolean]])
+      table <- F.suspend(LookupTable[F, PlanMatrix])
       _ <- ret.toStream
-        .foldLeftM[F, LookupTable[F, BlockingMatrix[F, Boolean]]](table) {
-          (t, ret) =>
-            val key = LKey(ret, Set.empty)
-            for {
-              binding <- F.delay(bindings(key))
-              LValue(_, plan) = binding
-              _ <- t.lookupOrBuildPlan(key)(resolvePlan(plan)(t))
-            } yield t
+        .foldLeftM[F, LookupTable[F, PlanMatrix]](table) { (t, ret) =>
+          val key = LKey(ret, Set.empty)
+          for {
+            binding <- F.delay(bindings(key))
+            LValue(_, plan) = binding
+            _ <- t.lookupOrBuildPlan(key)(resolvePlan(plan)(t))
+          } yield t
         }
     } yield table
 
