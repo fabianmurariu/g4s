@@ -23,6 +23,8 @@ object Traverser {
   type QueryGraph = mutable.Map[NodeRef, QGEdges]
   type Traverser[T] = State[QueryGraph, T]
 
+  case class Ret(ns: NodeRef*)
+
   def emptyQG = mutable.Map.empty[NodeRef, QGEdges]
 
   def node[T](implicit tt: TypeTag[T]): Traverser[NodeRef] = State { qg =>

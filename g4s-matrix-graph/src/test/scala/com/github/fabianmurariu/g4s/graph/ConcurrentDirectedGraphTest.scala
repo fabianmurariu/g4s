@@ -6,6 +6,7 @@ import cats.implicits._
 import com.github.fabianmurariu.g4s.IOSupport
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import com.github.fabianmurariu.g4s.traverser._
+import com.github.fabianmurariu.g4s.traverser.Traverser._
 
 import scala.util.Random
 
@@ -37,7 +38,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
-  test("insert 3000 nodes") {
+  test("insert 3000 nodes".ignore) {
     graph.use { g =>
       val nodes = (0 until 3000)
         .map(_ => Random.nextInt(5))
@@ -54,4 +55,131 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
+  test("diamond network: path (a)-[:X]->(b)-[:Y]->(c)") {
+    val query = for {
+      a <- node[A]
+      b <- node[B]
+      c <- node[C]
+      _ <- edge[X](a, b)
+      _ <- edge[Y](b, c)
+    } yield Ret(a, c)
+
+    graph.use{ g =>
+      for {
+        a <- g.insertVertex(new A)
+        b1 <- g.insertVertex(new B)
+        b2 <- g.insertVertex(new B)
+        c <- g.insertVertex(new C)
+        _ <- g.insertEdge(a, b1, new X)
+        _ <- g.insertEdge(b1, c, new Y)
+        _ <- g.insertEdge(a, b2, new X)
+        _ <- g.insertEdge(b2, c, new Y)
+        results <- g.resolveTraverser(query, true).compile.toList
+        _ <- IO.delay(println(results))
+      } yield ()
+    }
+  }
+  test("diamon network top path (a)-[:X]->(b)-[:Y]->(c), avoid (a)-[:Y]->(b)-[:W]->(c)") {
+    val query = for {
+      a <- node[A]
+      b <- node[B]
+      c <- node[C]
+      _ <- edge[X](a, b)
+      _ <- edge[Y](b, c)
+    } yield Ret(a, c)
+
+    graph.use{ g =>
+      for {
+        a <- g.insertVertex(new A)
+        b1 <- g.insertVertex(new B)
+        b2 <- g.insertVertex(new B)
+        c <- g.insertVertex(new C)
+        _ <- g.insertEdge(a, b1, new X)
+        _ <- g.insertEdge(b1, c, new Y)
+        _ <- g.insertEdge(a, b2, new Z)
+        _ <- g.insertEdge(b2, c, new W)
+        results <- g.resolveTraverser(query, true).compile.toList
+        _ <- IO.delay(println(results))
+      } yield ()
+    }
+  }
+
+  test("fork network path (a)-[:X]->(b)-[:Y]->(c)") {
+    val query = for {
+      a <- node[A]
+      b <- node[B]
+      c <- node[C]
+      _ <- edge[X](a, b)
+      _ <- edge[Y](b, c)
+    } yield Ret(a, c)
+
+    graph.use{ g =>
+      for {
+        a <- g.insertVertex(new A)
+        b <- g.insertVertex(new B)
+        c1 <- g.insertVertex(new C)
+        c2 <- g.insertVertex(new C)
+        _ <- g.insertEdge(a, b, new X)
+        _ <- g.insertEdge(b, c1, new Y)
+        _ <- g.insertEdge(b, c2, new Y)
+        results <- g.resolveTraverser(query, true).compile.toList
+        _ <- IO.delay(println(results))
+      } yield ()
+    }
+  }
+
+  test("fork network path 3-1-2 (a)-[:X]->(b)-[:Y]->(c) ret a, c") {
+    val query = for {
+      a <- node[A]
+      b <- node[B]
+      c <- node[C]
+      _ <- edge[X](a, b)
+      _ <- edge[Y](b, c)
+    } yield Ret(a, c)
+
+    graph.use{ g =>
+      for {
+        a1 <- g.insertVertex(new A)
+        a2 <- g.insertVertex(new A)
+        a3 <- g.insertVertex(new A)
+        b <- g.insertVertex(new B)
+        c1 <- g.insertVertex(new C)
+        c2 <- g.insertVertex(new C)
+        _ <- g.insertEdge(a1, b, new X)
+        _ <- g.insertEdge(a2, b, new X)
+        _ <- g.insertEdge(a3, b, new X)
+        _ <- g.insertEdge(b, c1, new Y)
+        _ <- g.insertEdge(b, c2, new Y)
+        results <- g.resolveTraverser(query, false).compile.toList
+        _ <- IO.delay(println(results))
+      } yield ()
+    }
+  }
+  test("fork network path 3-1-2 (a)-[:X]->(b)-[:Y]->(c) ret b, c") {
+    val query = for {
+      a <- node[A]
+      b <- node[B]
+      c <- node[C]
+      _ <- edge[X](a, b)
+      _ <- edge[Y](b, c)
+    } yield Ret(b, c)
+
+    graph.use{ g =>
+      for {
+        a1 <- g.insertVertex(new A)
+        a2 <- g.insertVertex(new A)
+        a3 <- g.insertVertex(new A)
+        b <- g.insertVertex(new B)
+        c1 <- g.insertVertex(new C)
+        c2 <- g.insertVertex(new C)
+        _ <- g.insertEdge(a1, b, new X)
+        _ <- g.insertEdge(a2, b, new X)
+        _ <- g.insertEdge(a3, b, new X)
+        _ <- g.insertEdge(b, c1, new Y)
+        _ <- g.insertEdge(b, c2, new Y)
+        results <- g.resolveTraverser(query, true).compile.toList
+        _ <- IO.delay(println(results))
+      } yield ()
+    }
+  }
 }

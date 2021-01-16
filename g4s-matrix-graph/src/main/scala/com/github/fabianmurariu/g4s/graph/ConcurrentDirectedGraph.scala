@@ -18,6 +18,10 @@ import fs2.Chunk
 import scala.reflect.ClassTag
 import cats.effect.concurrent.Ref
 import com.github.fabianmurariu.g4s.sparse.grb.GrBInvalidIndex
+import cats.data.State
+import scala.collection.mutable
+import com.github.fabianmurariu.g4s.traverser.Traverser.QGEdges
+import com.github.fabianmurariu.g4s.traverser.Traverser.Ret
 
 /**
   * Concurrent graph implementation
@@ -36,11 +40,61 @@ class ConcurrentDirectedGraph[F[_], V, E](
   sealed trait PlanMatrix
   case class Releasable(g: GrBMatrix[F, Boolean]) extends PlanMatrix
   case class UnReleasable(g: BlockingMatrix[F, Boolean]) extends PlanMatrix
-  // TODO: the graph should be able to evaluate a traverser object
-  // very likely Traverser will need to be redefined
-  // there could be a sub type of graph supporting only non-FP
-  // access to GrBMatrix without any generics and only with Long indices
-  // that can evaluate PlanStep instead of traverser
+
+  type QueryGraph = mutable.Map[NodeRef, QGEdges]
+
+  private def recoverBindingAndExtract(
+      bindings: LookupTable[F, PlanMatrix]
+  )(ref: NodeRef): F[GrBTuples] = {
+    bindings(LKey(ref, Set.empty)).flatMap {
+      case LValue(_, Releasable(grbMat)) =>
+        grbMat.show().map(s => println(s"RECOVER $s")) *> F.bracket(F.pure(grbMat)) {
+          _.extract.map { case (is, js, _) => 
+            new GrBTuples(is, js) 
+          }
+        }(_.release)
+      case LValue(_, UnReleasable(bm)) =>
+        bm.use(m => m.show().map(s => println(s"RECOVER $s")) *> m.extract).map({ case (is, js, _) =>
+          new GrBTuples(is, js) 
+        })
+    }
+  }
+
+  def resolveTraverser(t: State[QueryGraph, Ret], debug:Boolean = false): fs2.Stream[F, Vector[V]] = {
+
+    val (qg, ret) = t.run(mutable.Map.empty[NodeRef, QGEdges]).value
+
+    if (debug) {
+      println(
+        s""" ####### Query Graph ########## \n
+$qg
+            """
+      )
+    }
+    val logicalBindings = LogicalPlan.compilePlans(qg)(ret.ns.toSet)
+
+    if (debug) {
+      ret.ns.map{n => logicalBindings(LKey(n, Set.empty))}.foreach{
+        case LValue(_, step) => println(step.show)
+      }
+    }
+
+    fs2.Stream.eval(edges.use(_.show()).map(println)) *> fs2.Stream
+      .eval(evalPlans(ret.ns: _*)(logicalBindings))
+      .evalMap { physicalBindings =>
+        ret.ns.map(recoverBindingAndExtract(physicalBindings)).toVector.sequence
+      }
+      .flatMap(
+        selections => // return a, b, .. means Vector(GrBTuples(a), GrBTuples(b), .. )
+          fs2.Stream.fromIterator[F](
+//FIXME: yet another place where resize needs to be accounted for
+            GrBTuples.crossRowNodesForMatrix(2L * 1024L, selections)
+          )
+      )
+      .evalMap(ds.getVs)
+      .map(_.toVector)
+  }
+
   def evalPlans(ret: NodeRef*)(
       bindings: LookupTable[cats.Id, PlanStep]
   ): F[LookupTable[F, PlanMatrix]] = {
@@ -155,6 +209,11 @@ class ConcurrentDirectedGraph[F[_], V, E](
       case LoadNodes(ref) =>
         nodeLabels.getOrCreate(ref.name).map(UnReleasable)
 
+      case Union(binds) =>
+        binds.map(bind => bindings(bind.key)).collect{
+          case LValue(rc, Expand(from, tpe, to, transpose)) =>
+        }
+
       case _ => F.raiseError(new NotImplementedError)
     }
 
@@ -257,7 +316,7 @@ object ConcurrentDirectedGraph {
       CT: ClassTag[V]
   ): Resource[F, ConcurrentDirectedGraph[F, V, E]] =
     for {
-      size <- Resource.liftF(Ref.of[F, (Long, Long)]((1024L, 1024L)))
+      size <- Resource.liftF(Ref.of[F, (Long, Long)]((2L * 1024L, 2L * 1024L)))
       edges <- BlockingMatrix[F, Boolean](size)
       edgesT <- BlockingMatrix[F, Boolean](size)
       edgeTypes <- LabelledMatrices[F](size)

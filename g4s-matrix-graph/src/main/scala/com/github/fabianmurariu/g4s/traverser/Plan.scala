@@ -18,15 +18,15 @@ sealed abstract class PlanStep { self =>
   }
 
   def materialise: PlanStep = self match {
-    case Union(plans) =>
-      plans.iterator
-        .map(_.lookup)
-        .map { case e: Expand => e }
-        .toVector
-        .reverse
-        .reduce { (e1, e2) =>
-          e2.copy(to = e1) // simplified version
-        }
+    // case Union(plans) =>
+    //   plans.iterator
+    //     .map(_.lookup)
+    //     .map { case e: Expand => e }
+    //     .toVector
+    //     .reverse
+    //     .reduce { (e1, e2) =>
+    //       e2.copy(to = e1) // simplified version
+    //     }
     case p => p
   }
 }
@@ -37,7 +37,7 @@ case class LoadNodes(ref: NodeRef) extends PlanStep
 case class Expand(
     from: Bind[Id, PlanStep],
     edgeType: String,
-    to: PlanStep,
+    to: LoadNodes,
     transpose: Boolean
 ) extends PlanStep
 

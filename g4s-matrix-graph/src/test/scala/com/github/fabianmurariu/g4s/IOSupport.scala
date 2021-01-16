@@ -4,7 +4,7 @@ import cats.effect.{ContextShift, IO}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
-abstract class  IOSupport extends munit.FunSuite {
+abstract class IOSupport extends munit.FunSuite {
 
   implicit val ec: ExecutionContextExecutor = ExecutionContext.global
   implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)

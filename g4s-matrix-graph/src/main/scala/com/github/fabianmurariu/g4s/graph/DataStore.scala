@@ -83,6 +83,7 @@ object DataStore {
 
     def getVs(ids: Array[Long]): F[Array[V]] =
       F.delay {
+        println(s"FROM DATASTORE ${ids.toVector}")
         ids.iterator
           .map(map.get(_))
           .filter(_ != null)
