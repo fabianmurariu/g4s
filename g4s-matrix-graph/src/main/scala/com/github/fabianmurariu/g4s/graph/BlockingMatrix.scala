@@ -4,9 +4,8 @@ import cats.implicits._
 import cats.effect.{Concurrent, Resource}
 import cats.effect.concurrent.Semaphore
 import com.github.fabianmurariu.g4s.sparse.grb.{GRB, SparseMatrixHandler}
-import com.github.fabianmurariu.g4s.sparse.grbv2.{GrBMatrix, MatrixSelection}
+import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import fs2.Stream
-import scala.reflect.ClassTag
 import cats.effect.concurrent.Ref
 
 class BlockingMatrix[F[_], A](
@@ -31,11 +30,7 @@ class BlockingMatrix[F[_], A](
       lock.release
     )
 
-  private def resize(rows: Long, cols: Long): F[Unit] = {
-    use {
-      _.resize(rows, cols)
-    }
-  }
+  
 
   /**
     * Creates a [[fs2.Stream]] of this Blocking matrix
@@ -74,7 +69,7 @@ class BlockingMatrix[F[_], A](
               // selection
               //   .show()
               //   .map(sel => println(s"Step: remaining: $remaining, newOffset: $newOffset, selection: [$sel] into: (${rows}x${cols})")) *>
-              F.bracket(F.delay(GrBMatrix.unsafe[F, A](rows, cols))) { mat =>
+              F.bracket(GrBMatrix.unsafe[F, A](rows, cols)) { mat =>
                 mat
                   .set(selection)
                   .flatMap(_.extract)

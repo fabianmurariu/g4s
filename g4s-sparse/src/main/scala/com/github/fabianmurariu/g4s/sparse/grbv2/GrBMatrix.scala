@@ -69,7 +69,21 @@ sealed trait GrBMatrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double)
   def reduce(
       op: GrBBinaryOp[A, A, A]
   )(implicit SVH: SparseVectorHandler[A]): Resource[F, GrBVector[F, A]] =
-    (for {
+    reduce0(op, None)
+
+  def reduceColumns(op: GrBBinaryOp[A, A, A])
+                   (implicit SVH: SparseVectorHandler[A]): Resource[F, GrBVector[F, A]] =
+    for {
+      d <- Descriptor[F]
+      _ <- Resource.liftF(d.set[Input1, Transpose])
+      descP <- Resource.liftF(d.pointer.map(Some(_)))
+      v <- reduce0(op, descP)
+    } yield v
+
+  def reduce0(
+      op: GrBBinaryOp[A, A, A], desc: Option[GrBDescriptor]
+  )(implicit SVH: SparseVectorHandler[A]): Resource[F, GrBVector[F, A]] = {
+ (for {
       r <- Resource.liftF(self.nrows)
       v <- GrBVector[F, A](r)
     } yield v).evalMap[F, GrBVector[F, A]] { vec =>
@@ -83,11 +97,12 @@ sealed trait GrBMatrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double)
             null,
             op.pointer,
             m.ref,
-            null
+            desc.map(_.pointer).orNull
           )
         }
       } yield vec
     }
+  }
 
   def transpose[X](
       mask: Option[GrBMatrix[F, X]] = None,
@@ -221,8 +236,13 @@ object GrBMatrix {
       .map { mp => new DefaultMatrix(M.pure(mp)) }
   }
 
-  private[g4s] def unsafe[F[_], A](rows: Long, cols:Long)(implicit M:Sync[F], G:GRB, SMH:SparseMatrixHandler[A]):GrBMatrix[F, A] =
-    new DefaultMatrix(M.pure(new MatrixPointer(SMH.createMatrix(rows, cols))))
+  private[g4s] def unsafe[F[_], A](rows: Long, cols:Long)
+                         (implicit M:Sync[F], G:GRB, SMH:SparseMatrixHandler[A]):F[GrBMatrix[F, A]] =
+    M.delay(new DefaultMatrix(M.pure(new MatrixPointer(SMH.createMatrix(rows, cols)))))
+
+  private[g4s] def unsafeFn[F[_], A](rows: Long, cols:Long)
+                         (implicit M:Sync[F], G:GRB, SMH:SparseMatrixHandler[A]):F[String => GrBMatrix[F, A]] =
+    M.delay(_ => new DefaultMatrix(M.pure(new MatrixPointer(SMH.createMatrix(rows, cols)))))
 
   def fromTuples[F[_], A](
       rows: Long,

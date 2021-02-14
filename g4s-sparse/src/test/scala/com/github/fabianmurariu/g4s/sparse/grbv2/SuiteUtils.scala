@@ -58,12 +58,11 @@ object MatrixTuples extends WithDistinctBy {
 
   implicit def matrixTuplesArb[T](
       implicit T: Arbitrary[T],
-      CT: ClassTag[T]
   ): Arbitrary[MatrixTuples[T]] = {
 
     val gen = for {
-      rows <- Gen.posNum[Int]
-      cols <- Gen.posNum[Int]
+      rows <- Gen.posNum[Long]
+      cols <- Gen.posNum[Long]
       vals <- Gen
         .nonEmptyContainerOf[Vector, (Long, Long, T)](
           genVal(rows, cols)(T.arbitrary)
@@ -89,7 +88,7 @@ object MxMSample extends WithDistinctBy {
       implicit T: Arbitrary[T]
   ): Arbitrary[MxMSample[T]] = {
 
-    def matTuples(rows: Int, cols: Int) =
+    def matTuples(rows: Long, cols: Long) =
       for {
         vals <- Gen
           .nonEmptyContainerOf[Vector, (Long, Long, T)](
@@ -99,7 +98,7 @@ object MxMSample extends WithDistinctBy {
       } yield MatrixTuples[T](rows, cols, vals)
 
     val gen = for {
-      size <- Gen.posNum[Int]
+      size <- Gen.posNum[Long]
       a <- matTuples(size, size)
       b <- matTuples(size, size)
       c <- matTuples(size, size)
@@ -108,4 +107,32 @@ object MxMSample extends WithDistinctBy {
     Arbitrary(gen)
   }
 
+}
+
+case class VectorTuples[A](size: Long, tuples: Vector[(Long, A)])
+
+object VectorTuples extends WithDistinctBy {
+
+  def genVal[T](size: Long)(g: Gen[T]): Gen[(Long, T)] =
+    for {
+      i <- Gen.choose(0, size - 1)
+      v <- g
+    } yield (i, v)
+
+  implicit def vectorTuplesArb[T](
+      implicit T: Arbitrary[T],
+  ): Arbitrary[VectorTuples[T]] = {
+
+    val gen = for {
+      size <- Gen.posNum[Long]
+      vals <- Gen
+        .nonEmptyContainerOf[Vector, (Long, T)](
+          genVal(size)(T.arbitrary)
+        )
+        .map(_.distinctBy(_._1))
+    } yield VectorTuples[T](size, vals)
+
+    Arbitrary(gen)
+
+  }
 }

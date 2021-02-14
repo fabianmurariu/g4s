@@ -61,7 +61,7 @@ lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("munit.Framework"),
   coverageEnabled := true,
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-effect" % "2.2.0",
+    "org.typelevel" %% "cats-effect" % "2.3.1",
     "com.github.mpilquist" %% "simulacrum" % "0.19.0",
     "org.scalameta" %% "munit" % "0.7.11" % Test,
     "org.scalameta" %% "munit-scalacheck" % "0.7.11" % Test

@@ -25,8 +25,8 @@ class LabelledMatrices[F[_]](
       lock <- Semaphore[F](1)
       s <- shape.get
       (rows, cols) = s
-    } yield _ =>
-      new BlockingMatrix(lock, GrBMatrix.unsafe[F, Boolean](rows, cols))
+      f <- GrBMatrix.unsafeFn[F, Boolean](rows, cols)
+    } yield {s:String => new BlockingMatrix(lock, f(s))}
 
   def getOrCreate(label: String): F[BlockingMatrix[F, Boolean]] =
     for {

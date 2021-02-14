@@ -8,6 +8,8 @@ import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import com.github.fabianmurariu.g4s.traverser._
 import com.github.fabianmurariu.g4s.traverser.Traverser._
 
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.Random
 
 class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
@@ -55,7 +57,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
-  test("diamond network: path (a)-[:X]->(b)-[:Y]->(c)") {
+  test("diamond network: path (a)-[:X]->(b)-[:Y]->(c)".ignore) {
     val query = for {
       a <- node[A]
       b <- node[B]
@@ -79,7 +81,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       } yield ()
     }
   }
-  test("diamon network top path (a)-[:X]->(b)-[:Y]->(c), avoid (a)-[:Y]->(b)-[:W]->(c)") {
+  test("diamon network top path (a)-[:X]->(b)-[:Y]->(c), avoid (a)-[:Y]->(b)-[:W]->(c)".ignore) {
     val query = for {
       a <- node[A]
       b <- node[B]
@@ -104,7 +106,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
-  test("fork network path (a)-[:X]->(b)-[:Y]->(c)") {
+  test("fork network path (a)-[:X]->(b)-[:Y]->(c)".ignore) {
     val query = for {
       a <- node[A]
       b <- node[B]
@@ -128,7 +130,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
-  test("fork network path 3-1-2 (a)-[:X]->(b)-[:Y]->(c) ret a, c") {
+  test("fork network path 3-1-2 (a)-[:X]->(b)-[:Y]->(c) ret a, c".ignore) {
     val query = for {
       a <- node[A]
       b <- node[B]
@@ -155,7 +157,10 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       } yield ()
     }
   }
-  test("fork network path 3-1-2 (a)-[:X]->(b)-[:Y]->(c) ret b, c") {
+
+  override def munitTimeout: Duration = new FiniteDuration(30, TimeUnit.MINUTES)
+
+  test("fork network path 3-1-2 (a)-[:X]->(b)-[:Y]->(c) ret b".ignore) {
     val query = for {
       a <- node[A]
       b <- node[B]
