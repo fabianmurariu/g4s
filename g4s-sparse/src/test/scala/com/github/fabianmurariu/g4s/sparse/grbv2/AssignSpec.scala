@@ -19,7 +19,7 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
   extract[Float]
   extract[Double]
 
-  def extract[T: SparseMatrixHandler: ClassTag: Arbitrary: EqOp] = {
+  def extract[T: SparseMatrixHandler: ClassTag: Arbitrary: EqOp]: Unit = {
     property(
       s"extract top half of the matrix a to matrix b, resize a to b, the result should be equal, ${implicitly[ClassTag[T]]}"
     ) {

@@ -149,9 +149,9 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
   def filter(exp: String, filter: String, rc: Int = 1): String = {
     s"${ref(exp, rc)}(${filter})"
   }
-  def ref(str: String, count: Int = 1) =
+  def ref(str: String, count: Int = 1): String =
     s"[${count};$str]"
 
-  def sel(expand: String, count: Int = 1) =
+  def sel(expand: String, count: Int = 1): String =
     s"sel[${count};$expand]"
 }

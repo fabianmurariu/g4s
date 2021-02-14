@@ -8,20 +8,20 @@ import com.github.fabianmurariu.g4s.sparse.grb.{SparseMatrixHandler}
 import scala.concurrent.ExecutionContext
 import cats.effect.IO
 import munit.ScalaCheckSuite
-import scala.collection.immutable.{Vector => SVector}
 import com.github.fabianmurariu.g4s.sparse.grb.ElemWise
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
+import scala.concurrent.ExecutionContextExecutor
 
 class ElemWiseSpec extends ScalaCheckSuite {
-  implicit val ec = ExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
   def intersect[A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: Reduce: EqOp](
       implicit OP: BuiltInBinaryOps[A],
       N: Numeric[A]
-  ) = {
+  ): Unit = {
     property(
       s"intersect/union matrix with itself ${implicitly[ClassTag[A]]} sum every element expect it to be x*2 and equal with eachoter"
     ) {

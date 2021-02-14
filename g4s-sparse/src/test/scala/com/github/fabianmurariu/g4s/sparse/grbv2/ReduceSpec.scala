@@ -18,12 +18,14 @@ import scala.math.Numeric.Implicits._
 import com.github.fabianmurariu.g4s.sparse.grb.SparseVectorHandler
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import cats.effect.IO
+import org.scalacheck
+import scala.concurrent.ExecutionContextExecutor
 
 class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
 
-  implicit val ec = ExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
-  override def scalaCheckTestParameters =
+  override def scalaCheckTestParameters: scalacheck.Test.Parameters =
     super.scalaCheckTestParameters
       .withMinSuccessfulTests(50)
       .withMaxDiscardRatio(10)
@@ -31,7 +33,7 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
 
   def reduceSpec[
       A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: Reduce: EqOp: MonoidBuilder: SparseVectorHandler
-  ](implicit N: Numeric[A], OP: BuiltInBinaryOps[A]) = {
+  ](implicit N: Numeric[A], OP: BuiltInBinaryOps[A]): Unit = {
 
     def checkEquals(actual: A, expected: A) = {
 

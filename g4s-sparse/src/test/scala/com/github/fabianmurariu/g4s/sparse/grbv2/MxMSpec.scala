@@ -16,14 +16,15 @@ import com.github.fabianmurariu.g4s.sparse.grb.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
+import scala.concurrent.ExecutionContextExecutor
 
 class MxMSpec extends ScalaCheckSuite {
-  implicit val ec = ExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
   def associative[A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: MonoidBuilder: Reduce: EqOp](
       implicit OP: BuiltInBinaryOps[A],
       N: Numeric[A]
-  ) = {
+  ): Unit = {
     property(
       s"MxM is associative ${implicitly[ClassTag[A]]}"
     ) {

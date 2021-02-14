@@ -7,7 +7,7 @@ import org.scalacheck.Gen
 
 trait SuiteUtils {
 
-  def tuples[A: ClassTag](m: MatrixTuples[A]) = {
+  def tuples[A: ClassTag](m: MatrixTuples[A]): (Array[Long], Array[Long], Array[A]) = {
 
     val is = m.tuples.map(_._1).toArray
     val js = m.tuples.map(_._2).toArray

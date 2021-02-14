@@ -9,13 +9,14 @@ import cats.effect.IO
 import scala.concurrent.ExecutionContext
 import cats.effect.Resource
 import cats.effect.concurrent.Ref
+import cats.effect.ContextShift
 
 class BlockingMatrixTest extends ScalaCheckSuite {
 
   override val scalaCheckInitialSeed =
     "cKQ9U86ACRkbbSogYKQvZIbnIkiiU2HJ1qpY0AKBrHM="
 
-  implicit val cs = IO.contextShift(ExecutionContext.global)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   property(
     "stream a matrix row by row then re-assemble should equal the original"
@@ -63,7 +64,7 @@ class BlockingMatrixTest extends ScalaCheckSuite {
     }
   }
 
-  def testBlock(mt: MatrixTuples[Boolean], pageSize: Long) = {
+  def testBlock(mt: MatrixTuples[Boolean], pageSize: Long): IO[Unit] = {
     Resource.liftF(Ref.of[IO, (Long, Long)]((mt.rows, mt.cols))).
        >>= (BlockingMatrix[IO, Boolean](_)).use { bm =>
       for {

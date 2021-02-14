@@ -16,7 +16,7 @@ final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T)(implicit G:G
 
 object GrBMonoid {
 
-  def apply[F[_]:Sync, T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T)(implicit G:GRB) =
+  def apply[F[_]:Sync, T: MonoidBuilder](op:GrBBinaryOp[T, T, T], zero: T)(implicit G:GRB): Resource[F,GrBMonoid[T]] =
     Resource.fromAutoCloseable(
       Sync[F].delay{
         new GrBMonoid(MonoidBuilder[T].createMonoid(op.pointer, zero), zero)

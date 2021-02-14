@@ -75,7 +75,7 @@ object GrBBinaryOp {
 
 object BuiltInBinaryOps {
 
-  implicit val boolean = new BuiltInBinaryOps[Boolean] {
+  implicit val boolean: BuiltInBinaryOps[Boolean] = new BuiltInBinaryOps[Boolean] {
     val first: GrBBinaryOp[Boolean, Boolean, Boolean] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpBoolean())
     val second: GrBBinaryOp[Boolean, Boolean, Boolean] =
@@ -132,7 +132,7 @@ object BuiltInBinaryOps {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpBoolean())
   }
 
-  implicit val double = new BuiltInBinaryOps[Double] {
+  implicit val double: BuiltInBinaryOps[Double] = new BuiltInBinaryOps[Double] {
     val first: GrBBinaryOp[Double, Double, Double] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpDouble())
     val second: GrBBinaryOp[Double, Double, Double] =
@@ -189,7 +189,7 @@ object BuiltInBinaryOps {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpDouble())
   }
 
-  implicit val short = new BuiltInBinaryOps[Short] {
+  implicit val short: BuiltInBinaryOps[Short] = new BuiltInBinaryOps[Short] {
     val first: GrBBinaryOp[Short, Short, Short] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpShort())
     val second: GrBBinaryOp[Short, Short, Short] =
@@ -246,7 +246,7 @@ object BuiltInBinaryOps {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpShort())
   }
 
-  implicit val long = new BuiltInBinaryOps[Long] {
+  implicit val long: BuiltInBinaryOps[Long] = new BuiltInBinaryOps[Long] {
     val first: GrBBinaryOp[Long, Long, Long] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpLong())
     val second: GrBBinaryOp[Long, Long, Long] =
@@ -303,7 +303,7 @@ object BuiltInBinaryOps {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpLong())
   }
 
-  implicit val float = new BuiltInBinaryOps[Float] {
+  implicit val float: BuiltInBinaryOps[Float] = new BuiltInBinaryOps[Float] {
     val first: GrBBinaryOp[Float, Float, Float] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpFloat())
     val second: GrBBinaryOp[Float, Float, Float] =
@@ -360,7 +360,7 @@ object BuiltInBinaryOps {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpFloat())
   }
 
-  implicit val int = new BuiltInBinaryOps[Int] {
+  implicit val int: BuiltInBinaryOps[Int] = new BuiltInBinaryOps[Int] {
     val first: GrBBinaryOp[Int, Int, Int] =
       GrBBinaryOp(GRAPHBLAS.firstBinaryOpInt())
     val second: GrBBinaryOp[Int, Int, Int] =
@@ -417,7 +417,7 @@ object BuiltInBinaryOps {
       GrBBinaryOp(GRAPHBLAS.leBinaryOpInt())
   }
 
-  implicit val byte = new BuiltInBinaryOps[Byte] {
+  implicit val byte: BuiltInBinaryOps[Byte] = new BuiltInBinaryOps[Byte] {
     val any: GrBBinaryOp[Byte, Byte, Byte] =
       GrBBinaryOp(GRAPHBLAS.anyBinaryOpByte())
     val first: GrBBinaryOp[Byte, Byte, Byte] =

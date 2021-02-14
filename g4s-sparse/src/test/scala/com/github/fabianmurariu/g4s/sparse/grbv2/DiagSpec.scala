@@ -12,12 +12,14 @@ import com.github.fabianmurariu.g4s.sparse.grb.SparseVectorHandler
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import cats.effect.IO
 import com.github.fabianmurariu.g4s.sparse.grb.Diag
+import org.scalacheck
+import scala.concurrent.ExecutionContextExecutor
 
 class DiagSpec extends ScalaCheckSuite with SuiteUtils {
 
-  implicit val ec = ExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
-  override def scalaCheckTestParameters =
+  override def scalaCheckTestParameters: scalacheck.Test.Parameters =
     super.scalaCheckTestParameters
       .withMinSuccessfulTests(50)
       .withMaxDiscardRatio(10)
@@ -27,7 +29,7 @@ class DiagSpec extends ScalaCheckSuite with SuiteUtils {
       SVH: SparseVectorHandler[T],
       SMH: SparseMatrixHandler[T],
       OP: BuiltInBinaryOps[T]
-  ) = {
+  ): Unit = {
 
     property(
       s"set vector to diagonal of matrix ${implicitly[ClassTag[T]]}"

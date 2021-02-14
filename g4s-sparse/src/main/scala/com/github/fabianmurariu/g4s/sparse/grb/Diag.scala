@@ -26,5 +26,5 @@ trait Diag[F[_]] {
 
 object Diag{
 
-  def apply[F[_]] = new Diag[F] {}
+  def apply[F[_]]: Diag[F] = new Diag[F] {}
 }

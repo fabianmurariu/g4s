@@ -25,7 +25,7 @@ object Traverser {
 
   case class Ret(ns: NodeRef*)
 
-  def emptyQG = mutable.Map.empty[NodeRef, QGEdges]
+  def emptyQG: mutable.Map[NodeRef,QGEdges] = mutable.Map.empty[NodeRef, QGEdges]
 
   def node[T](implicit tt: TypeTag[T]): Traverser[NodeRef] = State { qg =>
     val label = tt.tpe.toString()
@@ -58,7 +58,7 @@ object Traverser {
     (qg, ref)
   }
 
-  implicit class QueryGraphOps(val qg: QueryGraph) extends AnyVal {
+  implicit class QueryGraphOps(private val qg: QueryGraph) extends AnyVal {
 
     def out(v: NodeRef): Iterable[EdgeRef] =
       qg.get(v).toSeq.flatMap(_.out)
@@ -72,13 +72,13 @@ object Traverser {
     def inV(v: NodeRef): Iterable[NodeRef] =
       in(v).map(_.src)
 
-    def neighbours(v: NodeRef) =
+    def neighbours(v: NodeRef): Iterable[EdgeRef] =
       out(v) ++ in(v)
 
     def edges:Set[EdgeRef] =
       qg.values.flatMap(e => e.in ++ e.out).toSet
 
-    def dfs(v: NodeRef) = {
+    def dfs(v: NodeRef): mutable.Map[NodeRef,Option[NodeRef]] = {
       val out = mutable.Map[NodeRef, Option[NodeRef]](v -> None)
 
       def innerDfs(node: NodeRef): Unit = {
@@ -94,7 +94,7 @@ object Traverser {
       out
     }
 
-    def removeVertex(v: NodeRef) = {
+    def removeVertex(v: NodeRef): Option[QGEdges] = {
       qg.outV(v).foreach { dst =>
         val into = qg(dst).in
         into.retain(_.src != v)

@@ -52,7 +52,7 @@ object GrBError {
     case err => throw GrBError(err)
   }
 
-  def apply(code:Long) = code match {
+  def apply(code:Long): GrBError = code match {
     case 2 => new GrBUninitializedObject()
     case 3 => new GrBInvalidObject
     case 4 => new GrBNullPointer

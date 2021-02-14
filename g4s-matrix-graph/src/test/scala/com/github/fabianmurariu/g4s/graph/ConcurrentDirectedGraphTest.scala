@@ -11,10 +11,11 @@ import com.github.fabianmurariu.g4s.traverser.Traverser._
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.util.Random
+import cats.effect.Resource
 
 class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
 
-  def graph = ConcurrentDirectedGraph[IO, Vertex, Relation]
+  def graph: Resource[IO,ConcurrentDirectedGraph[IO,Vertex,Relation]] = ConcurrentDirectedGraph[IO, Vertex, Relation]
 
   test("insert one node") {
     graph.use { g => g.insertVertex(new A).map(id => assertEquals(id, 0L)) }

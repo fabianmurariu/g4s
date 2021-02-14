@@ -71,10 +71,10 @@ object DescPair {
   def defaultForAllKeys[K <: DescKey](k:K): DescPair[K, Default] =
     DescPair(k, Default())
 
-  implicit val defaultForOutput = defaultForAllKeys(Output())
-  implicit val defaultForInput0 = defaultForAllKeys(Input0())
-  implicit val defaultForInput1 = defaultForAllKeys(Input1())
-  implicit val defaultForMask = defaultForAllKeys(Mask())
+  implicit val defaultForOutput: DescPair[Output,Default] = defaultForAllKeys(Output())
+  implicit val defaultForInput0: DescPair[Input0,Default] = defaultForAllKeys(Input0())
+  implicit val defaultForInput1: DescPair[Input1,Default] = defaultForAllKeys(Input1())
+  implicit val defaultForMask: DescPair[Mask,Default] = defaultForAllKeys(Mask())
 
   implicit val transposeForInput0: DescPair[Input0, Transpose] =
     DescPair(Input0(), Transpose())

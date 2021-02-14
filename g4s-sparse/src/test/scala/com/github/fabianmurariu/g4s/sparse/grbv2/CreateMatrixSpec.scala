@@ -1,13 +1,9 @@
 package com.github.fabianmurariu.g4s.sparse.grbv2
 
-import scala.collection.generic.CanBuildFrom
-import scala.collection.immutable.{Vector => SVector}
 import scala.concurrent.ExecutionContext
-import scala.concurrent.Future
 import scala.reflect.ClassTag
 
 import cats.effect.IO
-import cats.effect.Resource
 import cats.implicits._
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
@@ -16,11 +12,12 @@ import com.github.fabianmurariu.g4s.sparse.grb.SparseMatrixHandler
 import munit.ScalaCheckSuite
 import org.scalacheck.Arbitrary
 import org.scalacheck.Prop._
+import scala.concurrent.ExecutionContextExecutor
 
 class CreateMatrixSpec extends ScalaCheckSuite {
-  implicit val ec = ExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
-  def tuples[A: ClassTag](m: MatrixTuples[A]) = {
+  def tuples[A: ClassTag](m: MatrixTuples[A]): (Array[Long], Array[Long], Array[A]) = {
 
     val is = m.tuples.map(_._1).toArray
     val js = m.tuples.map(_._2).toArray
@@ -31,7 +28,7 @@ class CreateMatrixSpec extends ScalaCheckSuite {
 
   def createdProp[
       A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: Reduce: EqOp
-  ] = {
+  ]: Unit = {
 
     property(
       s"resize matrix has different shape ${implicitly[ClassTag[A]]}"
