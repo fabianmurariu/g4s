@@ -15,7 +15,8 @@ import cats.effect.Resource
 
 class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
 
-  def graph: Resource[IO,ConcurrentDirectedGraph[IO,Vertex,Relation]] = ConcurrentDirectedGraph[IO, Vertex, Relation]
+  def graph: Resource[IO, ConcurrentDirectedGraph[IO, Vertex, Relation]] =
+    ConcurrentDirectedGraph[IO, Vertex, Relation]
 
   test("insert one node") {
     graph.use { g => g.insertVertex(new A).map(id => assertEquals(id, 0L)) }
@@ -58,16 +59,14 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
-  test("diamond network: path (a)-[:X]->(b)-[:Y]->(c)".ignore) {
+  test("single edge: path (a)-[:X]->(b)") {
     val query = for {
       a <- node[A]
       b <- node[B]
-      c <- node[C]
       _ <- edge[X](a, b)
-      _ <- edge[Y](b, c)
-    } yield Ret(a, c)
+    } yield Ret(b)
 
-    graph.use{ g =>
+    graph.use { g =>
       for {
         a <- g.insertVertex(new A)
         b1 <- g.insertVertex(new B)
@@ -77,12 +76,13 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
         _ <- g.insertEdge(b1, c, new Y)
         _ <- g.insertEdge(a, b2, new X)
         _ <- g.insertEdge(b2, c, new Y)
-        results <- g.resolveTraverser(query, true).compile.toList
+        results <- g.resolveTraverser(query).compile.toList
         _ <- IO.delay(println(results))
       } yield ()
     }
   }
-  test("diamon network top path (a)-[:X]->(b)-[:Y]->(c), avoid (a)-[:Y]->(b)-[:W]->(c)".ignore) {
+
+  test("diamond network: path (a)-[:X]->(b)-[:Y]->(c)".ignore) {
     val query = for {
       a <- node[A]
       b <- node[B]
@@ -91,7 +91,34 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       _ <- edge[Y](b, c)
     } yield Ret(a, c)
 
-    graph.use{ g =>
+    graph.use { g =>
+      for {
+        a <- g.insertVertex(new A)
+        b1 <- g.insertVertex(new B)
+        b2 <- g.insertVertex(new B)
+        c <- g.insertVertex(new C)
+        _ <- g.insertEdge(a, b1, new X)
+        _ <- g.insertEdge(b1, c, new Y)
+        _ <- g.insertEdge(a, b2, new X)
+        _ <- g.insertEdge(b2, c, new Y)
+        results <- g.resolveTraverser(query).compile.toList
+        _ <- IO.delay(println(results))
+      } yield ()
+    }
+  }
+
+  test(
+    "diamon network top path (a)-[:X]->(b)-[:Y]->(c), avoid (a)-[:Y]->(b)-[:W]->(c)".ignore
+  ) {
+    val query = for {
+      a <- node[A]
+      b <- node[B]
+      c <- node[C]
+      _ <- edge[X](a, b)
+      _ <- edge[Y](b, c)
+    } yield Ret(a, c)
+
+    graph.use { g =>
       for {
         a <- g.insertVertex(new A)
         b1 <- g.insertVertex(new B)
@@ -101,7 +128,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
         _ <- g.insertEdge(b1, c, new Y)
         _ <- g.insertEdge(a, b2, new Z)
         _ <- g.insertEdge(b2, c, new W)
-        results <- g.resolveTraverser(query, true).compile.toList
+        results <- g.resolveTraverser(query).compile.toList
         _ <- IO.delay(println(results))
       } yield ()
     }
@@ -116,7 +143,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       _ <- edge[Y](b, c)
     } yield Ret(a, c)
 
-    graph.use{ g =>
+    graph.use { g =>
       for {
         a <- g.insertVertex(new A)
         b <- g.insertVertex(new B)
@@ -125,7 +152,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
         _ <- g.insertEdge(a, b, new X)
         _ <- g.insertEdge(b, c1, new Y)
         _ <- g.insertEdge(b, c2, new Y)
-        results <- g.resolveTraverser(query, true).compile.toList
+        results <- g.resolveTraverser(query).compile.toList
         _ <- IO.delay(println(results))
       } yield ()
     }
@@ -140,7 +167,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       _ <- edge[Y](b, c)
     } yield Ret(a, c)
 
-    graph.use{ g =>
+    graph.use { g =>
       for {
         a1 <- g.insertVertex(new A)
         a2 <- g.insertVertex(new A)
@@ -153,7 +180,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
         _ <- g.insertEdge(a3, b, new X)
         _ <- g.insertEdge(b, c1, new Y)
         _ <- g.insertEdge(b, c2, new Y)
-        results <- g.resolveTraverser(query, false).compile.toList
+        results <- g.resolveTraverser(query).compile.toList
         _ <- IO.delay(println(results))
       } yield ()
     }
@@ -170,7 +197,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       _ <- edge[Y](b, c)
     } yield Ret(b, c)
 
-    graph.use{ g =>
+    graph.use { g =>
       for {
         a1 <- g.insertVertex(new A)
         a2 <- g.insertVertex(new A)
@@ -183,7 +210,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
         _ <- g.insertEdge(a3, b, new X)
         _ <- g.insertEdge(b, c1, new Y)
         _ <- g.insertEdge(b, c2, new Y)
-        results <- g.resolveTraverser(query, true).compile.toList
+        results <- g.resolveTraverser(query).compile.toList
         _ <- IO.delay(println(results))
       } yield ()
     }

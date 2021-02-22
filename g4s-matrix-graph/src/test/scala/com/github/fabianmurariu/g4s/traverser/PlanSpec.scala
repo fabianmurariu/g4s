@@ -35,11 +35,15 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
     val actual = LogicalPlan.compilePlans(qg, mutable.Map.empty)(allOut)
 
+    assertEquals(actual(0).count, 2)
+    assertEquals(actual(1).count, 2)
+
     val bPlan = actual(0).deref.get
     val aPlan = actual(1).deref.get
 
     assertEquals(bPlan.show, filter(expandOut(a, X), b))
-    assertEquals(aPlan.show, filter(expandIn(b, X), a))
+    // aPlan is the same as bPlan but a is found on the row axis instead of column
+    assertEquals(aPlan.show, filter(expandOut(a, X), b))
   }
 
   test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for c") {
