@@ -59,7 +59,7 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
-  test("single edge: path (a)-[:X]->(b)") {
+  test("single edge: path (a)-[:X]->(b)".ignore) {
     val query = for {
       a <- node[A]
       b <- node[B]

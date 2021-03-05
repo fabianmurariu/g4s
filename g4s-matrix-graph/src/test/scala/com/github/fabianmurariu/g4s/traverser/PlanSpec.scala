@@ -103,7 +103,36 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
     )
   }
 
+  /*
+   * In the case where we have a pair of nodes to return
+   * this means there is a single matrix required
+   * where one node is on rows dimension and the other is on columns
+   *
+   */
   test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for c, b") {
+    val qg = eval(Av_X_Bv_Y_Cv)
+    val cRef = NodeRef(c)
+    val bRef = NodeRef(b)
+
+    val actual =
+      LogicalPlan.compilePlans(qg, mutable.Map.empty)(Seq(cRef, bRef))
+
+    val cPlan = actual(0).deref.get
+    val bPlan = actual(1).deref.get
+
+    assertEquals(
+      cPlan.show,
+      filter(expandOut(sel(filter(expandOut(a, X), b)), Y), c)
+    )
+
+    assertEquals(
+      bPlan.show,
+      filter(expandOut(sel(filter(expandOut(a, X), b)), Y), c)
+    )
+
+  }
+
+  test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for b, c") {
     val qg = eval(Av_X_Bv_Y_Cv)
     val cRef = NodeRef(c)
     val bRef = NodeRef(b)
@@ -111,18 +140,15 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
     val actual =
       LogicalPlan.compilePlans(qg, mutable.Map.empty)(Seq(bRef, cRef))
 
-    val bPlan = actual(0).deref.get
-    val cPlan = actual(1).deref.get
+    val cPlan = actual(0).deref.get
+    val bPlan = actual(1).deref.get
 
-    assertEquals(
-      cPlan.show,
-      filter(expandOut(filter(expandOut(a, X), b, 2), Y), c)
-    )
+    val samePlan =
+      filter(expandIn(c, Y),sel(filter(expandOut(a, X), b)))
 
-    assertEquals(
-      bPlan.show,
-      filter(expandOut(a, X), sel(filter(expandIn(c, Y), b)), 2)
-    )
+    assertEquals(bPlan.show, samePlan)
+
+    assertEquals(cPlan.show, samePlan)
 
   }
 

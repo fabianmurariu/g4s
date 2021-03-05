@@ -51,7 +51,7 @@ object LogicalPlan {
   sealed trait Diagonal extends Step
 
   /**
-    * transform an expand to a diagonal matrix
+    * transform an expand or filter to a diagonal matrix
     * by reducing over columns
     * and setting the resulting vector
     * on a diagonal
@@ -105,7 +105,8 @@ object LogicalPlan {
   private[traverser] def dfsCompileExpansion(
       qg: mutable.Map[NodeRef, QGEdges],
       seen: LookupTable[Step] = emptyLookupTable,
-      exclude: Set[EdgeRef] = Set.empty
+      exclude: Set[EdgeRef] = Set.empty,
+      input: Option[NodeRef] = None
   )(edge: EdgeRef, sel: NodeRef): Rc[Step] = {
 
     val e @ EdgeRef(name, src, dst) = edge
@@ -116,7 +117,7 @@ object LogicalPlan {
       val child = if (transpose) dst else src
       new Rc(
         Expand(
-          dfsCompilePlan(qg, seen, exclude + e)(child).ref,
+          dfsCompilePlan(qg, seen, exclude + e)(child, input).ref,
           name,
           transpose
         )
@@ -149,14 +150,18 @@ object LogicalPlan {
           val e = neighbours.head
           val exc = (exclude ++ ((neighbours -- exclude) - e))
           val expand =
-            dfsCompileExpansion(qg, seen, exc)(e, sel)
+            dfsCompileExpansion(qg, seen, exc, input)(e, sel)
           val filter = new Rc(
             Filter(
               expand.ref,
               LoadNodes(sel)
             )
           )
-          filter
+          if (input.contains(sel)) {
+            // we reached a node that is part of the root output edge
+            // we need to get it on the row side and keep it there
+            new Rc(Select(filter.ref))
+          } else filter
         } else {
           // this is where we need
           // to ensure the input node
@@ -169,16 +174,16 @@ object LogicalPlan {
             e -> dfsCompileExpansion(qg, seen, exc)(e, sel)
           }
 
-          val last = subPaths.find{case (_, s) => s.map(_.row == input)}
+          val last = subPaths.find{case (_, subPath) => subPath.map(p => input.exists(p.row))}
 
-          val (_, plan) = subPaths.head
+          val subPathsInputRemoved = subPaths.filterNot(subPath => last.contains(subPath))
+
+          val (_, plan) = subPathsInputRemoved.head
 
           val filter = new Rc(Filter(plan.ref, LoadNodes(sel)))
 
           val first = Select(filter.ref)
-          val rest = subPaths
-            .tail
-            .filterNot{last.contains} // remove the input node if it exists
+          val rest = subPathsInputRemoved.tail
 
           val combinedPlan:Select = rest.foldLeft(first) {
             case (select, (_, expand)) =>
