@@ -225,12 +225,6 @@ object LogicalPlan {
           // find if we get the plan for free
           // on the row or column of a previous plan
           val step = dfsCompilePlan(qg, table, exclude)(n, input).ref
-          // val step = b.find{s =>
-          //   s.map(_.row).contains(n) || s.map(_.column).contains(n)
-          // } match {
-          //   case Some(found) => found.ref
-          //   case None =>
-          // }
           input match {
             case None =>
               step :: b

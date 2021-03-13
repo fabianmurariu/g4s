@@ -6,6 +6,7 @@ import cats.effect.IO
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async._
 import com.github.fabianmurariu.g4s.graph.GrBTuples
 import cats.effect.Resource
+import scala.collection.mutable.ArrayBuffer
 
 class GrBTuplesSpec extends IOSupport {
 
@@ -104,5 +105,50 @@ class GrBTuplesSpec extends IOSupport {
     } yield (a, b)
 
     res.use(_ => IO.unit)
+  }
+
+  test("sort join merge of 2 GrBTuples with 0 rows") {
+    val left = new GrBTuples(Array.empty, Array.empty)
+    val right = new GrBTuples(Array.empty, Array.empty)
+    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    assertEquals(res, Seq.empty)
+  }
+
+  test("sort join merge of 2 GrBTuples with 1 rows not equals means empty out") {
+    val left = new GrBTuples(Array(1), Array.empty)
+    val right = new GrBTuples(Array(2), Array.empty)
+    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    assertEquals(res, Seq.empty)
+  }
+
+  test("sort join merge of 2 GrBTuples with 1 rows equals means 1 row out") {
+    val left = new GrBTuples(Array(1), Array(0))
+    val right = new GrBTuples(Array(1), Array(2))
+    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    assertEquals(res, Seq(ArrayBuffer[Long](1, 0, 2)))
+  }
+
+  test("sort join merge of 2 GrBTuples with 2 rows 1 equals one not means first out") {
+    val left = new GrBTuples(Array(1, 5), Array(0, 3))
+    val right = new GrBTuples(Array(1), Array(2))
+    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    assertEquals(res, Seq(ArrayBuffer[Long](1, 0, 2)))
+  }
+
+  test("sort join merge of 2 GrBTuples with 2 rows 1 equals one not means second out") {
+    val left = new GrBTuples(Array(1, 5), Array(0, 3))
+    val right = new GrBTuples(Array(5), Array(2))
+    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    assertEquals(res, Seq(ArrayBuffer[Long](5, 3, 2)))
+  }
+
+  test("sort join merge of 2 GrBTuples with 2 rows 2 equals means 2 out") {
+    val left = new GrBTuples(Array(2, 4, 3), Array(0, 3, 1))
+    val right = new GrBTuples(Array(2, 4), Array(7, 8))
+    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    assertEquals(res, Seq(
+      ArrayBuffer[Long](2, 0, 7),
+      ArrayBuffer[Long](4, 3, 8)
+      ))
   }
 }
