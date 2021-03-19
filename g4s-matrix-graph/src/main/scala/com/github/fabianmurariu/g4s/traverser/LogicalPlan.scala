@@ -94,6 +94,12 @@ object LogicalPlan {
     val column: Set[NodeRef] = filter.column
   }
 
+  case class InnerJoin(left: Rc[Step], right:Rc[Step]) extends Step {
+    //FIXME: figure out valid values for this
+    val row: Set[NodeRef] = Set.empty
+    val column: Set[NodeRef] = Set.empty
+  }
+
   /**
     * context for keeping track
     * of subgraphs explored
@@ -225,14 +231,13 @@ object LogicalPlan {
           // find if we get the plan for free
           // on the row or column of a previous plan
           val step = dfsCompilePlan(qg, table, exclude)(n, input).ref
-          input match {
-            case None =>
-              step :: b
-            case _ =>
-              step :: step.ref :: b
-          }
+          step :: b
       }
       .reverse
+  }
+
+  def joinPlans(plans: Seq[Rc[Step]]):Rc[Step] = {
+    plans.reduce((p1, p2) => new Rc(InnerJoin(p1.ref, p2.ref)))
   }
 
   class Rc[+A](a: A, private var rc: Int = 0) {

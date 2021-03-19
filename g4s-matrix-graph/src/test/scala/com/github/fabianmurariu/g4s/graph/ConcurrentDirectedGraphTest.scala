@@ -42,73 +42,131 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
-  test("insert 3000 nodes".ignore) {
+  test("insert 3000 nodes") {
+    def vec = Vector(new A, new B, new C, new D, new E)
     graph.use { g =>
       val nodes = (0 until 3000)
-        .map(_ => Random.nextInt(5))
-        .map {
-          case 0 => new A
-          case 1 => new B
-          case 2 => new C
-          case 3 => new D
-          case 4 => new E
-        }
+        .map(_ => vec(Random.nextInt(5)))
         .toVector
 
       nodes.traverse[IO, Long](g.insertVertex(_))
     }
   }
 
-  test("single edge: path (a)-[:X]->(b)".ignore) {
+  test("single edge: path (a)-[:X]->(b) ret b on diamond network") {
     val query = for {
       a <- node[A]
       b <- node[B]
       _ <- edge[X](a, b)
     } yield Ret(b)
 
+    val b1Node = new B
+    val b2Node = new B
+
     graph.use { g =>
       for {
         a <- g.insertVertex(new A)
-        b1 <- g.insertVertex(new B)
-        b2 <- g.insertVertex(new B)
+        b1 <- g.insertVertex(b1Node)
+        b2 <- g.insertVertex(b2Node)
         c <- g.insertVertex(new C)
         _ <- g.insertEdge(a, b1, new X)
         _ <- g.insertEdge(b1, c, new Y)
         _ <- g.insertEdge(a, b2, new X)
         _ <- g.insertEdge(b2, c, new Y)
         results <- g.resolveTraverser(query).compile.toList
-        _ <- IO.delay(println(results))
-      } yield ()
+      } yield {
+        assertEquals(results.toSet, Set[Vector[Vertex]](Vector(b1Node), Vector(b2Node)))
+      }
     }
   }
 
-  test("diamond network: path (a)-[:X]->(b)-[:Y]->(c)".ignore) {
+  test("single edge: path (a)-[:X]->(b) ret a, b on diamond network") {
+    val query = for {
+      a <- node[A]
+      b <- node[B]
+      _ <- edge[X](a, b)
+    } yield Ret(a, b)
+
+    val b1Node = new B
+    val b2Node = new B
+    val aNode = new A
+    graph.use { g =>
+      for {
+        a <- g.insertVertex(aNode)
+        b1 <- g.insertVertex(b1Node)
+        b2 <- g.insertVertex(b2Node)
+        c <- g.insertVertex(new C)
+        _ <- g.insertEdge(a, b1, new X)
+        _ <- g.insertEdge(b1, c, new Y)
+        _ <- g.insertEdge(a, b2, new X)
+        _ <- g.insertEdge(b2, c, new Y)
+        results <- g.resolveTraverser(query).compile.toList
+      } yield {
+        assertEquals(results.toSet,
+                     Set[Vector[Vertex]](Vector(aNode, b1Node), Vector(aNode, b2Node)))
+      }
+    }
+  }
+
+  test("2 endge path (a)-[:X]->(b)-[:Y]->(c) ret c on diamond network") {
     val query = for {
       a <- node[A]
       b <- node[B]
       c <- node[C]
       _ <- edge[X](a, b)
       _ <- edge[Y](b, c)
-    } yield Ret(a, c)
+    } yield Ret(c)
+
+    val cNode = new C
 
     graph.use { g =>
       for {
         a <- g.insertVertex(new A)
         b1 <- g.insertVertex(new B)
         b2 <- g.insertVertex(new B)
+        c <- g.insertVertex(cNode)
+        _ <- g.insertEdge(a, b1, new X)
+        _ <- g.insertEdge(b1, c, new Y)
+        _ <- g.insertEdge(a, b2, new X)
+        _ <- g.insertEdge(b2, c, new Y)
+        results <- g.resolveTraverser(query).compile.toList
+      } yield {
+        assertEquals(results.toSet, Set[Vector[Vertex]](Vector(cNode)))
+      }
+    }
+  }
+
+  test("2 endge path (a)-[:X]->(b)-[:Y]->(c) ret b on diamond network") {
+    val query = for {
+      a <- node[A]
+      b <- node[B]
+      c <- node[C]
+      _ <- edge[X](a, b)
+      _ <- edge[Y](b, c)
+    } yield Ret(b)
+
+    val b1Node = new B
+    val b2Node = new B
+
+    graph.use { g =>
+      for {
+        a <- g.insertVertex(new A)
+        b1 <- g.insertVertex(b1Node)
+        b2 <- g.insertVertex(b2Node)
         c <- g.insertVertex(new C)
         _ <- g.insertEdge(a, b1, new X)
         _ <- g.insertEdge(b1, c, new Y)
         _ <- g.insertEdge(a, b2, new X)
         _ <- g.insertEdge(b2, c, new Y)
         results <- g.resolveTraverser(query).compile.toList
-        _ <- IO.delay(println(results))
-      } yield ()
+      } yield {
+        assertEquals(results.toSet, Set[Vector[Vertex]](Vector(b1Node), Vector(b2Node)))
+      }
     }
   }
 
   test(
-    "diamon network top path (a)-[:X]->(b)-[:Y]->(c), avoid (a)-[:Y]->(b)-[:W]->(c)".ignore
+    "diamon network top path (a)-[:X]->(b)-[:Y]->(c) ret a, avoid (a)-[:Y]->(b)-[:W]->(c)"
   ) {
     val query = for {
       a <- node[A]
@@ -116,11 +174,12 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       c <- node[C]
       _ <- edge[X](a, b)
       _ <- edge[Y](b, c)
-    } yield Ret(a, c)
+    } yield Ret(a)
 
+    val aNode = new A
     graph.use { g =>
       for {
-        a <- g.insertVertex(new A)
+        a <- g.insertVertex(aNode)
         b1 <- g.insertVertex(new B)
         b2 <- g.insertVertex(new B)
         c <- g.insertVertex(new C)
@@ -129,8 +188,9 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
         _ <- g.insertEdge(a, b2, new Z)
         _ <- g.insertEdge(b2, c, new W)
         results <- g.resolveTraverser(query).compile.toList
-        _ <- IO.delay(println(results))
-      } yield ()
+      } yield {
+        assertEquals(results.toSet, Set[Vector[Vertex]](Vector(aNode)))
+      }
     }
   }
 

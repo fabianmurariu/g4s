@@ -75,7 +75,7 @@ sealed trait GrBMatrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double)
                    (implicit SVH: SparseVectorHandler[A]): Resource[F, GrBVector[F, A]] =
     for {
       d <- Descriptor[F]
-      _ <- Resource.liftF(d.set[Input1, Transpose])
+      _ <- Resource.liftF(d.set[Input0, Transpose])
       descP <- Resource.liftF(d.pointer.map(Some(_)))
       v <- reduce0(op, descP)
     } yield v
