@@ -94,7 +94,7 @@ object LogicalPlan {
     val column: Set[NodeRef] = filter.column
   }
 
-  case class InnerJoin(left: Rc[Step], right:Rc[Step]) extends Step {
+  case class InnerJoin(left: Rc[Step], right: Rc[Step]) extends Step {
     //FIXME: figure out valid values for this
     val row: Set[NodeRef] = Set.empty
     val column: Set[NodeRef] = Set.empty
@@ -175,14 +175,18 @@ object LogicalPlan {
           // the last one to expand
           // against the selection
 
-          val subPaths: Vector[(EdgeRef, Rc[Step])] = neighbours.toVector.map { e =>
-            val exc = (exclude ++ ((neighbours -- exclude) - e))
-            e -> dfsCompileExpansion(qg, seen, exc)(e, sel)
+          val subPaths: Vector[(EdgeRef, Rc[Step])] = neighbours.toVector.map {
+            e =>
+              val exc = (exclude ++ ((neighbours -- exclude) - e))
+              e -> dfsCompileExpansion(qg, seen, exc)(e, sel)
           }
 
-          val last = subPaths.find{case (_, subPath) => subPath.map(p => input.exists(p.row))}
+          val last = subPaths.find {
+            case (_, subPath) => subPath.map(p => input.exists(p.row))
+          }
 
-          val subPathsInputRemoved = subPaths.filterNot(subPath => last.contains(subPath))
+          val subPathsInputRemoved =
+            subPaths.filterNot(subPath => last.contains(subPath))
 
           val (_, plan) = subPathsInputRemoved.head
 
@@ -191,7 +195,7 @@ object LogicalPlan {
           val first = Select(filter.ref)
           val rest = subPathsInputRemoved.tail
 
-          val combinedPlan:Select = rest.foldLeft(first) {
+          val combinedPlan: Select = rest.foldLeft(first) {
             case (select, (_, expand)) =>
               Select(new Rc(Filter(expand.ref, select)).ref)
           }
@@ -227,16 +231,17 @@ object LogicalPlan {
         (a, b)
       }
       .foldLeft(List.empty[Rc[Step]]) {
-        case (b, (n, input)) =>
-          // find if we get the plan for free
-          // on the row or column of a previous plan
-          val step = dfsCompilePlan(qg, table, exclude)(n, input).ref
-          step :: b
+        case (res, (a, None)) => 
+          val step = dfsCompilePlan(qg, table, exclude)(a, None).ref
+          step :: res
+        case (res, (a, Some(b))) =>
+          val step = dfsCompilePlan(qg, table, exclude)(b, Some(a)).ref
+          step :: res
       }
       .reverse
   }
 
-  def joinPlans(plans: Seq[Rc[Step]]):Rc[Step] = {
+  def joinPlans(plans: Seq[Rc[Step]]): Rc[Step] = {
     plans.reduce((p1, p2) => new Rc(InnerJoin(p1.ref, p2.ref)))
   }
 

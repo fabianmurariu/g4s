@@ -165,36 +165,41 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
     }
   }
 
-  test(
-    "diamon network top path (a)-[:X]->(b)-[:Y]->(c) ret a, avoid (a)-[:Y]->(b)-[:W]->(c)"
-  ) {
+  test("diamond network with 3 returns, single path (a)-[:X]->(b)-[:Y]->(c) ret a, b, c") {
     val query = for {
       a <- node[A]
       b <- node[B]
       c <- node[C]
       _ <- edge[X](a, b)
       _ <- edge[Y](b, c)
-    } yield Ret(a)
+    } yield Ret(a, b, c)
 
     val aNode = new A
+    val b1Node = new B
+    val b2Node = new B
+    val cNode = new C
+
     graph.use { g =>
       for {
         a <- g.insertVertex(aNode)
-        b1 <- g.insertVertex(new B)
-        b2 <- g.insertVertex(new B)
-        c <- g.insertVertex(new C)
+        b1 <- g.insertVertex(b1Node)
+        b2 <- g.insertVertex(b2Node)
+        c <- g.insertVertex(cNode)
         _ <- g.insertEdge(a, b1, new X)
         _ <- g.insertEdge(b1, c, new Y)
         _ <- g.insertEdge(a, b2, new Z)
         _ <- g.insertEdge(b2, c, new W)
         results <- g.resolveTraverser(query).compile.toList
       } yield {
-        assertEquals(results.toSet, Set[Vector[Vertex]](Vector(aNode)))
+        assertEquals(results.toSet,
+                     Set[Vector[Vertex]](
+                       Vector(aNode, b1Node, cNode)
+                     ))
       }
     }
   }
 
-  test("fork network path (a)-[:X]->(b)-[:Y]->(c)".ignore) {
+  test("fork network: query (a)-[:X]->(b)-[:Y]->(c) ret a, c") {
     val query = for {
       a <- node[A]
       b <- node[B]
@@ -203,22 +208,29 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       _ <- edge[Y](b, c)
     } yield Ret(a, c)
 
+    val aNode = new A
+    val c1Node = new C
+    val c2Node = new C
     graph.use { g =>
       for {
-        a <- g.insertVertex(new A)
+        a <- g.insertVertex(aNode)
         b <- g.insertVertex(new B)
-        c1 <- g.insertVertex(new C)
-        c2 <- g.insertVertex(new C)
+        c1 <- g.insertVertex(c1Node)
+        c2 <- g.insertVertex(c2Node)
         _ <- g.insertEdge(a, b, new X)
         _ <- g.insertEdge(b, c1, new Y)
         _ <- g.insertEdge(b, c2, new Y)
         results <- g.resolveTraverser(query).compile.toList
-        _ <- IO.delay(println(results))
-      } yield ()
+      } yield {
+        assertEquals(results.toSet,
+                     Set[Vector[Vertex]](
+                       Vector(aNode, c1Node),
+                       Vector(aNode, c2Node)))
+      }
     }
   }
 
-  test("fork network path 3-1-2 (a)-[:X]->(b)-[:Y]->(c) ret a, c".ignore) {
+  test("fork network path 3-1-2 (a)-[:X]->(b)-[:Y]->(c) ret a, c".only) {
     val query = for {
       a <- node[A]
       b <- node[B]
@@ -227,22 +239,35 @@ class ConcurrentDirectedGraphTest extends IOSupport with QueryGraphSamples {
       _ <- edge[Y](b, c)
     } yield Ret(a, c)
 
+    val (a1Node, a2Node, a3Node) = (new A, new A, new A)
+    val bNode = new B
+    val (c1Node, c2Node) = (new C, new C)
+
     graph.use { g =>
       for {
-        a1 <- g.insertVertex(new A)
-        a2 <- g.insertVertex(new A)
-        a3 <- g.insertVertex(new A)
-        b <- g.insertVertex(new B)
-        c1 <- g.insertVertex(new C)
-        c2 <- g.insertVertex(new C)
+        a1 <- g.insertVertex(a1Node)
+        a2 <- g.insertVertex(a2Node)
+        a3 <- g.insertVertex(a3Node)
+        b <- g.insertVertex(bNode)
+        c1 <- g.insertVertex(c1Node)
+        c2 <- g.insertVertex(c2Node)
         _ <- g.insertEdge(a1, b, new X)
         _ <- g.insertEdge(a2, b, new X)
         _ <- g.insertEdge(a3, b, new X)
         _ <- g.insertEdge(b, c1, new Y)
         _ <- g.insertEdge(b, c2, new Y)
         results <- g.resolveTraverser(query).compile.toList
-        _ <- IO.delay(println(results))
-      } yield ()
+      } yield {
+        assertEquals(results.toSet,
+                     Set[Vector[Vertex]](
+                       Vector(a1Node, c1Node),
+                       Vector(a2Node, c1Node),
+                       Vector(a3Node, c1Node),
+                       Vector(a1Node, c2Node),
+                       Vector(a2Node, c2Node),
+                       Vector(a3Node, c2Node)
+                       ))
+      }
     }
   }
 

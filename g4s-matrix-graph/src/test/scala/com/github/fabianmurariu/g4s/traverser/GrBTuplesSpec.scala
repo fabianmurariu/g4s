@@ -110,45 +110,135 @@ class GrBTuplesSpec extends IOSupport {
   test("sort join merge of 2 GrBTuples with 0 rows") {
     val left = new GrBTuples(Array.empty, Array.empty)
     val right = new GrBTuples(Array.empty, Array.empty)
-    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    val res = GrBTuples.rowInnerMergeJoin(left, right)
     assertEquals(res, Seq.empty)
   }
 
   test("sort join merge of 2 GrBTuples with 1 rows not equals means empty out") {
     val left = new GrBTuples(Array(1), Array.empty)
     val right = new GrBTuples(Array(2), Array.empty)
-    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    val res = GrBTuples.rowInnerMergeJoin(left, right)
     assertEquals(res, Seq.empty)
   }
 
   test("sort join merge of 2 GrBTuples with 1 rows equals means 1 row out") {
     val left = new GrBTuples(Array(1), Array(0))
     val right = new GrBTuples(Array(1), Array(2))
-    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    val res = GrBTuples.rowInnerMergeJoin(left, right)
     assertEquals(res, Seq(ArrayBuffer[Long](1, 0, 2)))
   }
 
-  test("sort join merge of 2 GrBTuples with 2 rows 1 equals one not means first out") {
+  test(
+    "sort join merge of 2 GrBTuples with 2 rows 1 equals one not means first out"
+  ) {
     val left = new GrBTuples(Array(1, 5), Array(0, 3))
     val right = new GrBTuples(Array(1), Array(2))
-    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    val res = GrBTuples.rowInnerMergeJoin(left, right)
     assertEquals(res, Seq(ArrayBuffer[Long](1, 0, 2)))
   }
 
-  test("sort join merge of 2 GrBTuples with 2 rows 1 equals one not means second out") {
+  test(
+    "sort join merge of 2 GrBTuples with 2 rows 1 equals one not means second out"
+  ) {
     val left = new GrBTuples(Array(1, 5), Array(0, 3))
     val right = new GrBTuples(Array(5), Array(2))
-    val res = GrBTuples.rowInnerMergeJoin(left,right)
+    val res = GrBTuples.rowInnerMergeJoin(left, right)
     assertEquals(res, Seq(ArrayBuffer[Long](5, 3, 2)))
   }
 
   test("sort join merge of 2 GrBTuples with 2 rows 2 equals means 2 out") {
     val left = new GrBTuples(Array(2, 4, 3), Array(0, 3, 1))
     val right = new GrBTuples(Array(2, 4), Array(7, 8))
-    val res = GrBTuples.rowInnerMergeJoin(left,right)
-    assertEquals(res, Seq(
-      ArrayBuffer[Long](2, 0, 7),
-      ArrayBuffer[Long](4, 3, 8)
-      ))
+    val res = GrBTuples.rowInnerMergeJoin(left, right)
+    assertEquals(
+      res,
+      Seq(
+        ArrayBuffer[Long](2, 0, 7),
+        ArrayBuffer[Long](4, 3, 8)
+      )
+    )
+  }
+
+  test("sort join merge of 2 GrBTuples with 3 rows 3 equals means 3 out") {
+    val left = new GrBTuples(Array(2, 4, 3), Array(0, 3, 1))
+    val right = new GrBTuples(Array(2, 2, 4), Array(7, 8, 9))
+    val res = GrBTuples.rowInnerMergeJoin(left, right)
+    assertEquals(
+      res,
+      Seq(
+        ArrayBuffer[Long](2, 0, 7),
+        ArrayBuffer[Long](2, 0, 8),
+        ArrayBuffer[Long](4, 3, 9)
+      )
+    )
+  }
+
+  test("index join 2 GrBTuples non sorted, 0 rows") {
+    val left = new GrBTuples(Array.empty, Array.empty)
+    val right = new GrBTuples(Array.empty, Array.empty)
+    val res = GrBTuples.rowJoinOnBinarySearch(left.asRows, 1, right)
+    assertEquals(res, Seq.empty)
+  }
+
+  test("index join 2 GrBTuples non sorted, 1 row each no match") {
+    val left = new GrBTuples(Array(1), Array(1))
+    val right = new GrBTuples(Array(2), Array(1))
+    val res = GrBTuples.rowJoinOnBinarySearch(left.asRows, 1, right)
+    assertEquals(res, Seq.empty)
+  }
+
+  test("index joind 2 GrBTuples non sorted, 1 row each 1 match") {
+    val left = new GrBTuples(Array(0), Array(1))
+    val right = new GrBTuples(Array(1), Array(2))
+    val res = GrBTuples.rowJoinOnBinarySearch(left.asRows, 1, right)
+    assertEquals(res, Seq(ArrayBuffer[Long](0, 1, 2)))
+  }
+
+  test(
+    "index join of 2 GrBTuples with 2 rows 1 equals one not means second out"
+  ) {
+    val left = new GrBTuples(Array(3, 5), Array(0, 1))
+    val right = new GrBTuples(Array(1), Array(2))
+    val res = GrBTuples.rowJoinOnBinarySearch(left.asRows, 1, right)
+    assertEquals(res, Seq(ArrayBuffer[Long](5, 1, 2)))
+  }
+
+  test(
+    "index join of 2 GrBTuples with 2 rows 1 equals one not means first out"
+  ) {
+    val left = new GrBTuples(Array(1, 5), Array(0, 3))
+    val right = new GrBTuples(Array(0), Array(2))
+    val res = GrBTuples.rowJoinOnBinarySearch(left.asRows, 1, right)
+    assertEquals(res, Seq(ArrayBuffer[Long](1, 0, 2)))
+  }
+
+  test("index join of 2 GrBTuples with 2 rows 2 equals means 2 out") {
+    val left = new GrBTuples(Array(0, 1, 3), Array(2, 4, 3))
+    val right = new GrBTuples(Array(2, 4), Array(7, 8))
+    val res = GrBTuples.rowJoinOnBinarySearch(left.asRows, 1, right)
+    assertEquals(
+      res,
+      Seq(
+        ArrayBuffer[Long](0, 2, 7),
+        ArrayBuffer[Long](1, 4, 8)
+      )
+    )
+  }
+  test("index join of 2 GrBTuples 7 equals means 7 out") {
+    val left = new GrBTuples(Array(0, 1, 3), Array(4, 2, 3))
+    val right = new GrBTuples(Array(2, 2, 2, 2, 2, 2, 4), Array(1, 2, 3, 4, 5, 6, 7))
+    val res = GrBTuples.rowJoinOnBinarySearch(left.asRows, 1, right)
+    assertEquals(
+      res,
+      Seq(
+        ArrayBuffer[Long](0, 4, 7),
+        ArrayBuffer[Long](1, 2, 1),
+        ArrayBuffer[Long](1, 2, 2),
+        ArrayBuffer[Long](1, 2, 3),
+        ArrayBuffer[Long](1, 2, 4),
+        ArrayBuffer[Long](1, 2, 5),
+        ArrayBuffer[Long](1, 2, 6)
+      )
+    )
   }
 }

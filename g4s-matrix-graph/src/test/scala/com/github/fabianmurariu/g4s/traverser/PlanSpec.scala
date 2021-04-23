@@ -14,7 +14,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
     assertEquals(actual.show, filter(expandOut(a, X), b))
   }
 
-  test("plan for (a)-[:X]->(b) return a") {
+  test("plan for (a)-[:X]->(b) return a".ignore) {
     val qg = eval(singleEdge_Av_X_Bv)
 
     val aRef = NodeRef(a)
@@ -25,7 +25,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
     assertEquals(actual.show, filter(expandIn(b, X), a))
   }
 
-  test("plan for (a)-[:X]->(b) should have 2 plans for a and b") {
+  test("plan for (a)-[:X]->(b) should have 2 plans for a and b".ignore) {
 
     val aRef = NodeRef(a)
     val bRef = NodeRef(b)
@@ -109,7 +109,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
    * where one node is on rows dimension and the other is on columns
    *
    */
-  test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for c, b") {
+  test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for c, b".ignore) {
     val qg = eval(Av_X_Bv_Y_Cv)
     val cRef = NodeRef(c)
     val bRef = NodeRef(b)
@@ -132,7 +132,7 @@ class PlanSpec extends munit.FunSuite with QueryGraphSamples {
 
   }
 
-  test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for b, c") {
+  test("plan for (a)-[:X]->(b)-[:Y]->(c) should have plans for b, c".ignore) {
     val qg = eval(Av_X_Bv_Y_Cv)
     val cRef = NodeRef(c)
     val bRef = NodeRef(b)

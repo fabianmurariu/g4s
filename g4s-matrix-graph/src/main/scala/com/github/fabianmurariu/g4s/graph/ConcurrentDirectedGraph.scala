@@ -52,7 +52,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
   sealed trait PlanOutput
   case class Releasable(g: GrBMatrix[F, Boolean]) extends PlanOutput
   case class UnReleasable(g: BlockingMatrix[F, Boolean]) extends PlanOutput
-  case class IdTable(table: Array[ArrayBuffer[Long]]) extends PlanOutput
+  case class IdTable(table: Seq[ArrayBuffer[Long]]) extends PlanOutput
 
   type QueryGraph = mutable.Map[NodeRef, QGEdges]
   type Plans = Map[NodeRef, PlanOutput]
@@ -61,6 +61,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
   sealed trait IdScan
   case class Return1(ret: Array[Long]) extends IdScan
   case class Return2(ret1: Array[Long], ret2: Array[Long]) extends IdScan
+  case class ReturnN(ret: Seq[ArrayBuffer[Long]]) extends IdScan
 
   def resolveTraverser(
       t: State[QueryGraph, Ret]
@@ -71,10 +72,12 @@ class ConcurrentDirectedGraph[F[_], V, E](
     val plans = LogicalPlan.compilePlans(qg)(ret.ns)
     val fullPlan = LogicalPlan.joinPlans(plans)
 
-    val planMat:F[IdScan] =
+    val planMat: F[IdScan] =
       Ref.of(Map.empty[NodeRef, PlanOutput]).flatMap {
         context: Ref[F, Map[NodeRef, PlanOutput]] =>
           (F.delay(fullPlan.deref.get) >>= foldEvalPlan(context)).flatMap {
+            case (_, IdTable(rows)) =>
+              F.delay(ReturnN(rows))
             case (_, Releasable(mat)) if ret.ns.size == 1 =>
               // we were able to get the output in just one matrix
               // this means the numer of outpus is 1
@@ -109,20 +112,19 @@ class ConcurrentDirectedGraph[F[_], V, E](
     // this code works for a single return
     fs2.Stream
       .eval(planMat)
-      .map{
+      .map {
         case Return1(arr) =>
           arr.map(ArrayBuffer(_))
         case Return2(first, second) =>
-          Array.tabulate(first.length){
-            i => ArrayBuffer(first(i), second(i))
-          }
+          Array.tabulate(first.length) { i => ArrayBuffer(first(i), second(i)) }
+        case ReturnN(table) => 
+          table.toArray
       }
       .map(arr => Chunk.array(arr))
       .flatMap(fs2.Stream.chunk)
       .map(_.toVector)
-      .evalMap{
-        ids =>
-        ids.foldMapA(id => getV(id).map{case Some(v) => Vector(v)})
+      .evalMap { ids =>
+        ids.foldMapA(id => getV(id).map { case Some(v) => Vector(v) })
       }
 
   }
@@ -167,23 +169,9 @@ class ConcurrentDirectedGraph[F[_], V, E](
         left <- foldEvalPlan(context)(expandS)
         (ctx1, expandMat) = left
 
-        _ <- {
-          expandMat match {
-            case Releasable(m)   => m.show().map(println)
-            case UnReleasable(m) => m.use(_.show().map(println))
-          }
-        }
-
         selectS <- F.delay(step.deref.get)
         right <- foldEvalPlan(ctx1)(selectS)
         (ctx2, subMat) = right
-
-        _ <- {
-          subMat match {
-            case Releasable(m)   => m.show().map(println)
-            case UnReleasable(m) => m.use(_.show().map(println))
-          }
-        }
 
         selectMat <- expandToFilter(subMat)
         _ <- selectMat.show().map(println)
@@ -191,10 +179,45 @@ class ConcurrentDirectedGraph[F[_], V, E](
         filterMat <- matMul(expandMat, Releasable(selectMat))
       } yield (ctx2, filterMat)
 
-    case Select(step)                            => ???
-    case InnerJoin(left, right) if left == right => ???
-    case InnerJoin(left, right) if left == right => ???
+    case Select(step)                            =>
+      for {
+        selectS <- F.delay(step.deref.get)
 
+        right <- foldEvalPlan(context)(selectS)
+        (ctx, mat) = right
+        selectMat <- expandToFilter(mat)
+      } yield (ctx, Releasable(selectMat))
+
+    case InnerJoin(left, right) if left == right => ???
+    case InnerJoin(left, right) =>
+      for {
+        leftPlan <- F.delay(left.deref.get)
+        rightPlan <- F.delay(right.deref.get)
+        _ <- F.delay{
+          println(s"LEFT ${leftPlan.row}, ${leftPlan.column}")
+          println(s"RIGHT ${rightPlan.row}, ${rightPlan.column}")
+        }
+        l <- foldEvalPlan(context)(leftPlan)
+        (ctx1, lMat) = l
+        r <- foldEvalPlan(context)(rightPlan)
+        (ctx2, rMat) = r
+        out <- joinResults(lMat, rMat)
+      } yield (ctx2, out)
+  }
+
+  def joinResults(a: PlanOutput, b: PlanOutput): F[PlanOutput] = (a, b) match {
+    case (Releasable(aMat), Releasable(bMat)) =>
+      for {
+        tplsA <- GrBTuples.fromGrBExtract(aMat.extract)
+        tplsB <- GrBTuples.fromGrBExtract(bMat.extract)
+        _ <- F.delay{
+          println(tplsA.show)
+          println(tplsB.show)
+        }
+        out <- F.delay {
+          GrBTuples.rowJoinOnBinarySearch(tplsA.asRows, 1, tplsB)
+        }
+      } yield IdTable(out)
   }
 
   def matMul(a: PlanOutput, b: PlanOutput): F[PlanOutput] = (a, b) match {

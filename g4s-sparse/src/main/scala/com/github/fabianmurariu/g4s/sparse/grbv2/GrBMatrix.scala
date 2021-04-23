@@ -62,8 +62,8 @@ sealed trait GrBMatrix[F[_], @sp(Boolean, Byte, Short, Int, Long, Float, Double)
     set(is, js, vs)
   }
 
-  def extract: F[(Array[Long], Array[Long], Array[A])] = pointer.map { mp =>
-    H.extractTuples(mp.ref)
+  def extract: F[(Array[Long], Array[Long], Array[A])] = pointer.flatMap { mp =>
+    grbWait.map(_ =>  H.extractTuples(mp.ref))
   }
 
   def reduce(

@@ -2,6 +2,8 @@ package com.github.fabianmurariu.g4s.graph
 
 import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
+import cats.implicits._
+import cats.Functor
 
 class GrBTuples(val is: Array[Long], val js: Array[Long]) {
 
@@ -21,6 +23,9 @@ class GrBTuples(val is: Array[Long], val js: Array[Long]) {
     } else Iterator.empty
 
   }
+
+  def asRows: Seq[ArrayBuffer[Long]] = 
+    (is, js).zipped.map{case (i, j) => ArrayBuffer(i, j)}
 
 }
 
@@ -108,6 +113,42 @@ object GrBTuples {
 
     out.result()
   }
+
+  def rowJoinOnBinarySearch(left: Seq[ArrayBuffer[Long]], leftColumn: Int, right: GrBTuples): Seq[ArrayBuffer[Long]] = {
+
+    left.flatMap{
+      row => 
+        val key = row(leftColumn)
+        val is = right.is
+        val js = right.js
+
+        var i = Arrays.binarySearch(is, key)
+
+        if (i >= 0) {
+
+          // move back to the first value
+          while (i > 0 && is(i - 1) == key) {
+            i-=1
+          }
+
+          val buf = Seq.newBuilder[ArrayBuffer[Long]]
+
+          // grab all the tuples from right
+          // that match the key
+          while (i < is.length && is(i) == key) {
+            buf += (row :+ js(i))
+            i+=1
+          }
+
+          buf.result()
+        } else Seq.empty
+    }
+
+  }
+
+  @inline
+  def fromGrBExtract[F[_]:Functor, T](extract: F[(Array[Long], Array[Long], Array[T])]) =
+    extract.map{case (is, js, _) => new GrBTuples(is, js)}
 }
 
 class GrBTuplesRowIterator(var cur: Int, end: Int, js: Array[Long])
