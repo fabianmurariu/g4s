@@ -4,7 +4,6 @@ import cats.effect.IO
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps.boolean._
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps.float
-import com.github.fabianmurariu.g4s.sparse.grb.MxM
 import cats.Monad
 import cats.effect.concurrent.Ref
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb

@@ -12,7 +12,6 @@ import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.MonoidBuilder
-import com.github.fabianmurariu.g4s.sparse.grb.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb

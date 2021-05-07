@@ -156,4 +156,6 @@ object Reduce {
         )
       }
     }
+
+    def apply[A](implicit R:Reduce[A]):Reduce[A] = R
 }

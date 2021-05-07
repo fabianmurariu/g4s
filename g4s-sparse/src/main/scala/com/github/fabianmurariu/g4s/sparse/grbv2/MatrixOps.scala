@@ -1,30 +1,32 @@
 package com.github.fabianmurariu.g4s.sparse.grbv2
 
-import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
-import com.github.fabianmurariu.g4s.sparse.grb.GrBDescriptor
+import scala.reflect.ClassTag
 import cats.effect.Sync
 import cats.implicits._
+import cats.data.EitherT
+import cats.MonadError
+import com.github.fabianmurariu.unsafe.GRBOPSMAT
 import com.github.fabianmurariu.g4s.sparse.grb.GrBError
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
-import com.github.fabianmurariu.unsafe.GRBOPSMAT
 import com.github.fabianmurariu.g4s.sparse.grb.SparseMatrixHandler
-import cats.data.EitherT
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
-import com.github.fabianmurariu.g4s.sparse.grb.ElemWise
+import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
+import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
+import com.github.fabianmurariu.g4s.sparse.grb.GrBDescriptor
 
 object MatrixOps extends TransposeOps with ExtractOps with IsAllOps
 
 trait TransposeOps {
 
-  def transpose[F[_], A, B, C, X](out: GrBMatrix[F, A])(in: GrBMatrix[F, A])(
+  def transpose[F[_], A, B, C:ClassTag, X](out: F[MatrixPointer])(in: F[MatrixPointer])(
       mask: Option[GrBMatrix[F, X]] = None,
       accum: Option[GrBBinaryOp[A, B, C]] = None,
       desc: Option[GrBDescriptor] = None
-  )(implicit S: Sync[F], G:GRB, SMH: SparseMatrixHandler[C]): F[GrBMatrix[F, C]] =
+  )(implicit S: Sync[F]): F[MatrixPointer] =
     for {
-      mpIn <- in.pointer
-      mpOut <- out.pointer
+      mpIn <- in
+      mpOut <- out
       m <- mask.map(_.pointer.map(_.ref)).getOrElse(S.pure(null))
       _ <- S.delay {
         GrBError.check(
@@ -37,23 +39,23 @@ trait TransposeOps {
           )
         )
       }
-    } yield new DefaultMatrix(S.pure(mpOut))
+    } yield mpOut
 
 }
 
 trait ExtractOps {
   // to = from(I, J)
 
-  def extract[F[_], A, B, C, X](
-      to: GrBMatrix[F, A]
+  def extract[F[_], A, B, C:ClassTag, X](
+      to: F[MatrixPointer]
   )(from: MatrixSelection[F, A])(
       mask: Option[GrBMatrix[F, X]] = None,
       accum: Option[GrBBinaryOp[A, B, C]] = None,
       desc: Option[GrBDescriptor] = None
-  )(implicit S: Sync[F], G:GRB, SMH: SparseMatrixHandler[C]): F[GrBMatrix[F, C]] =
+  )(implicit S: Sync[F]): F[MatrixPointer] =
     for {
       mpIn <- from.mat.pointer
-      mpOut <- to.pointer
+      mpOut <- to
       grbMask <- mask.map(_.pointer.map(_.ref)).getOrElse(S.pure(null))
       _ <- S.delay {
         GrBError.check(
@@ -70,18 +72,18 @@ trait ExtractOps {
           )
         )
       }
-    } yield new DefaultMatrix(S.pure(mpOut))
+    } yield mpOut
 
   // to(I, J) = from
-  def assign[F[_], A, B, C, X](
+  def assign[F[_], A, B, C:ClassTag, X](
       to: MatrixSelection[F, A]
-  )(from: GrBMatrix[F, A])(
+  )(from: F[MatrixPointer])(
       mask: Option[GrBMatrix[F, X]] = None,
       accum: Option[GrBBinaryOp[A, B, C]] = None,
       desc: Option[GrBDescriptor] = None
-  )(implicit S: Sync[F], G:GRB, SMH: SparseMatrixHandler[C]): F[GrBMatrix[F, C]] =
+  )(implicit S: Sync[F]): F[MatrixPointer] =
     for {
-      mpIn <- from.pointer
+      mpIn <- from
       mpOut <- to.mat.pointer
       grbMask <- mask.map(_.pointer.map(_.ref)).getOrElse(S.pure(null))
       _ <- S.delay {
@@ -99,7 +101,7 @@ trait ExtractOps {
           )
         )
       }
-    } yield new DefaultMatrix(S.pure(mpOut))
+    } yield mpOut
 
 }
 
@@ -130,7 +132,7 @@ trait IsAllOps {
             _ <- eqEither(expectedNVals, nvals)(
               s"different nvals after intersect $expectedNVals != $nvals"
             )
-            check <- EitherT.right(inter.reduce(true, land))
+            check <- EitherT.right(inter.reduceRows(true, land))
             out <- eqEither(true, check)("different values")
           } yield out
           eF.value
@@ -154,5 +156,55 @@ trait IsAllOps {
       case Right(_) => true
       case Left(_)  => false
     }
+  }
+}
+
+trait MxM[F[_]] {
+
+  def mxm[A, B, C, X](
+      into: GrBMatrix[F, C]
+  )(fa: GrBMatrix[F, A], fb: GrBMatrix[F, B])(
+      semiring: GrBSemiring[A, B, C],
+      mask: Option[GrBMatrix[F, X]] = None,
+      accum: Option[GrBBinaryOp[C, C, C]] = None,
+      desc: Option[GrBDescriptor] = None
+  )(
+      implicit F: MonadError[F, Throwable]
+  ): F[GrBMatrix[F, C]] = {
+
+    for {
+      c <- into.pointer
+      a <- fa.pointer
+      b <- fb.pointer
+      m <- mask.map(_.pointer.map(_.ref)).getOrElse(F.pure(null))
+      _ <- F.fromEither{
+        Either.catchNonFatal(GrBError.check(
+          GRBOPSMAT.mxm(
+            c.ref,
+            m,
+            accum.map(_.pointer).orNull,
+            semiring.pointer,
+            a.ref,
+            b.ref,
+            desc.map(_.pointer).orNull
+          )
+        ))
+      }
+    } yield into
+
+  }
+
+}
+
+object MxM {
+
+  def apply[F[_]](implicit M: MxM[F]) = M
+
+  implicit def mxmInstance[F[_]]: MxM[F] = new MxM[F] {}
+
+  def evalOrFail[F[_], A](
+      f: => A
+  )(implicit F: MonadError[F, Throwable]): F[A] = {
+    F.fromEither(Either.catchNonFatal(f))
   }
 }

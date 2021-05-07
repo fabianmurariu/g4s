@@ -58,7 +58,7 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
         } yield (plus, mat)).use {
           case (plus, mat) =>
             for {
-              sum <- mat.reduce(N.zero, plus)
+              sum <- mat.reduceRows(N.zero, plus)
               tuples <- mat.extract
             } yield {
               val expected = tuples._3.reduce(N.plus)
@@ -84,7 +84,7 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
 
         val io: IO[Unit] = (for {
           mat <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
-          v <- mat.reduce(OP.max)
+          v <- mat.reduceRows(OP.max)
         } yield v).use {
           _.extract.map {
             case (_, actualVs) =>
@@ -104,7 +104,7 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
 
         val io: IO[Unit] = (for {
           mat <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
-          v <- mat.reduce(OP.min)
+          v <- mat.reduceRows(OP.min)
         } yield v).use {
           _.extract.map {
             case (_, actualVs) =>
@@ -124,7 +124,7 @@ class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
 
         val io: IO[Unit] = (for {
           mat <- GrBMatrix.fromTuples[IO, A](m.rows, m.cols)(is, js, vs)
-          v <- mat.reduce(OP.plus)
+          v <- mat.reduceRows(OP.plus)
         } yield v).use {
           _.extract.map {
             case (_, actualVs) =>

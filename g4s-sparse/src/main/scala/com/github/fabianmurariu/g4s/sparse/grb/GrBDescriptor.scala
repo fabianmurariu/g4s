@@ -6,6 +6,6 @@ import com.github.fabianmurariu.unsafe.GRBCORE
 case class GrBDescriptor(private[sparse] val pointer:Buffer)(implicit G:GRB) extends AutoCloseable{
 
   def close():Unit = {
-    GRBCORE.freeDescriptor(pointer)
+    GrBError.check(GRBCORE.freeDescriptor(pointer))
   }
 }

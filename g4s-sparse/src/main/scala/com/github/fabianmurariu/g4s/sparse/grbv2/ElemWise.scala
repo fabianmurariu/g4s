@@ -1,9 +1,11 @@
-package com.github.fabianmurariu.g4s.sparse.grb
+package com.github.fabianmurariu.g4s.sparse.grbv2
 
 import com.github.fabianmurariu.unsafe.GRBOPSMAT
-import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import cats.implicits._
 import cats.effect.Sync
+import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
+import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
+import com.github.fabianmurariu.g4s.sparse.grb.GrBDescriptor
 
 trait ElemWise[F[_]] {
 

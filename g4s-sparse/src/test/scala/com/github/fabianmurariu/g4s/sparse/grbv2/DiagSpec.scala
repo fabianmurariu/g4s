@@ -11,9 +11,9 @@ import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.SparseVectorHandler
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import cats.effect.IO
-import com.github.fabianmurariu.g4s.sparse.grb.Diag
 import org.scalacheck
 import scala.concurrent.ExecutionContextExecutor
+import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 
 class DiagSpec extends ScalaCheckSuite with SuiteUtils {
 
@@ -24,7 +24,7 @@ class DiagSpec extends ScalaCheckSuite with SuiteUtils {
       .withMinSuccessfulTests(50)
       .withMaxDiscardRatio(10)
 
-  def diagProps[T: ClassTag](
+  def diagProps[T: ClassTag: Reduce](
       implicit A: Arbitrary[VectorTuples[T]],
       SVH: SparseVectorHandler[T],
       SMH: SparseMatrixHandler[T],
@@ -59,7 +59,7 @@ class DiagSpec extends ScalaCheckSuite with SuiteUtils {
                 assertEquals(actualIs, is.sorted) // check with extract
 
               }
-              res <- mat.reduce(OP.any).use(_.extract)
+              res <- mat.reduceRows(OP.any).use(_.extract)
             } yield {
               assertEquals(res._1.toVector, is.sorted) // check after reduce
               assertEquals(res._2.toSet, vs.toSet)

@@ -5,7 +5,7 @@ import com.github.fabianmurariu.unsafe.GRBCORE
 import cats.effect.Sync
 import cats.effect.Resource
 
-final class GrBSemiring[A, B, C](private[grb] val pointer: Buffer)(implicit G:GRB)
+final class GrBSemiring[A, B, C](private[sparse] val pointer: Buffer)(implicit G:GRB)
     extends AutoCloseable {
 
   override def close(): Unit = {

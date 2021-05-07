@@ -8,7 +8,6 @@ import com.github.fabianmurariu.g4s.sparse.grb.{SparseMatrixHandler}
 import scala.concurrent.ExecutionContext
 import cats.effect.IO
 import munit.ScalaCheckSuite
-import com.github.fabianmurariu.g4s.sparse.grb.ElemWise
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp

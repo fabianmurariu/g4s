@@ -1,9 +1,11 @@
 ThisBuild / scalaVersion := "2.12.11"
 ThisBuild / organization := "com.github.fabianmurariu"
+ThisBuild / version      := "0.1.0-SNAPSHOT"
 
 val grbVersion = s"0.1.21-${sys.props("os.name").toLowerCase()}"
 
 lazy val commonSettings = Seq(
+  version := "0.1-SNAPSHOT",
   scalacOptions in (Compile, console) --= Seq(
     "-Ywarn-unused:imports",
     "-Xfatal-warnings"
@@ -94,6 +96,8 @@ lazy val docs = project // new documentation project
   .dependsOn(g4sSparse)
   .enablePlugins(MdocPlugin)
   .settings(
+    moduleName := "g4s-docs",
+    // mdocOut := baseDirectory.value / ".." /"g4s-docs-site" / "docs" / "tutorial-basics",
     mdocVariables := Map(
       "VERSION" -> version.value
     )

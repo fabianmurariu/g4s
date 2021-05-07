@@ -6,4 +6,4 @@ addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.6.1")
 
 addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.9.25")
 
-addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.2.6" )
+addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.2.20" )

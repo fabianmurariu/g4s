@@ -5,12 +5,12 @@ import com.github.fabianmurariu.unsafe.GRBCORE
 import cats.effect.Resource
 import cats.effect.Sync
 
-final class GrBMonoid[T](private[grb] val pointer: Buffer, zero: T)(implicit G:GRB) extends AutoCloseable {
+final class GrBMonoid[T](private[sparse] val pointer: Buffer, val zero: T)(implicit G:GRB) extends AutoCloseable {
 
   override def close(): Unit = {
-    GRBCORE.freeMonoid(pointer)
+    G
+    GrBError.check(GRBCORE.freeMonoid(pointer))
   }
-
 
 }
 

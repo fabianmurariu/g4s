@@ -8,6 +8,7 @@ import cats.effect.IO
 import cats.effect.Resource
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
+import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 
 class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
 
@@ -19,7 +20,7 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
   extract[Float]
   extract[Double]
 
-  def extract[T: SparseMatrixHandler: ClassTag: Arbitrary: EqOp]: Unit = {
+  def extract[T: SparseMatrixHandler: ClassTag: Arbitrary: EqOp: Reduce]: Unit = {
     property(
       s"extract top half of the matrix a to matrix b, resize a to b, the result should be equal, ${implicitly[ClassTag[T]]}"
     ) {
@@ -32,7 +33,7 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
             a <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
             b <- GrBMatrix[IO, T](r2, c2)
             _ <- Resource.liftF(
-              b.set(a(0L until r2, 0L until c2))
+              b.update(a(0L until r2, 0L until c2))
             ) // b = A(0:r2, 0:c2)
             _ <- Resource.liftF(a.resize(r2, c2))
             check <- Resource.liftF(b.isEq(a))

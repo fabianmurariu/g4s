@@ -1,9 +1,8 @@
-package com.github.fabianmurariu.g4s.sparse.grb
+package com.github.fabianmurariu.g4s.sparse.grbv2
 
-import com.github.fabianmurariu.g4s.sparse.grbv2.GrBVector
 import cats.implicits._
-import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import cats.effect.Sync
+import com.github.fabianmurariu.g4s.sparse.grb.SparseMatrixHandler
 
 trait Diag[F[_]] {
 
