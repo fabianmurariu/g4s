@@ -142,7 +142,7 @@ sealed class GrBMatrix[F[_]: Sync, A: Reduce: SMH: ClassTag](
   override def clear: F[Unit] =
     GrBMatrixOps.clear(pointer)
 
-  override private[grbv2] def release: F[Unit] =
+  override def release: F[Unit] =
     GrBMatrixOps.release(pointer)
 
   /**

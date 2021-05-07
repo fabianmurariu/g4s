@@ -7,8 +7,10 @@ import com.github.fabianmurariu.g4s.sparse.grb.{GRB, SparseMatrixHandler}
 import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import fs2.Stream
 import cats.effect.concurrent.Ref
+import scala.reflect.ClassTag
+import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 
-class BlockingMatrix[F[_], A](
+class BlockingMatrix[F[_], A: ClassTag: Reduce](
     lock: Semaphore[F],
     mat: GrBMatrix[F, A],
     var shutdown: Boolean = false
@@ -29,8 +31,6 @@ class BlockingMatrix[F[_], A](
     F.bracket(lock.acquire)(_ => F.delay(self.shutdown = true))(_ =>
       lock.release
     )
-
-  
 
   /**
     * Creates a [[fs2.Stream]] of this Blocking matrix
@@ -71,7 +71,7 @@ class BlockingMatrix[F[_], A](
               //   .map(sel => println(s"Step: remaining: $remaining, newOffset: $newOffset, selection: [$sel] into: (${rows}x${cols})")) *>
               F.bracket(GrBMatrix.unsafe[F, A](rows, cols)) { mat =>
                 mat
-                  .set(selection)
+                  .update(selection)
                   .flatMap(_.extract)
                   .map {
                     case (is, js, vs) =>
@@ -95,7 +95,7 @@ class BlockingMatrix[F[_], A](
 }
 
 object BlockingMatrix {
-  def apply[F[_]: Concurrent, A: SparseMatrixHandler](
+  def apply[F[_]: Concurrent, A: SparseMatrixHandler: ClassTag: Reduce](
       shape: Ref[F, (Long, Long)]
   )(
       implicit G: GRB
@@ -107,7 +107,7 @@ object BlockingMatrix {
       bm <- Resource.liftF(fromGrBMatrix(m))
     } yield bm
 
-  def fromGrBMatrix[F[_]: Concurrent, A](
+  def fromGrBMatrix[F[_]: Concurrent, A: ClassTag: Reduce](
       mat: GrBMatrix[F, A]
   ): F[BlockingMatrix[F, A]] =
     Semaphore[F](1).map(lock => new BlockingMatrix(lock, mat))

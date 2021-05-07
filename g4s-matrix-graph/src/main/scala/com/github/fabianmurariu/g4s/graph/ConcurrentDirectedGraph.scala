@@ -6,10 +6,13 @@ import cats.implicits._
 import com.github.fabianmurariu.g4s.sparse.grb.{
   BuiltInBinaryOps,
   GRB,
-  GrBSemiring,
-  MxM
+  GrBSemiring
 }
-import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
+import com.github.fabianmurariu.g4s.sparse.grbv2.{
+  GrBMatrix,
+  MxM,
+  Diag
+}
 import com.github.fabianmurariu.g4s.traverser._
 
 import scala.reflect.runtime.universe.{
@@ -26,7 +29,6 @@ import cats.data.State
 import scala.collection.mutable
 import com.github.fabianmurariu.g4s.traverser.Traverser.QGEdges
 import com.github.fabianmurariu.g4s.traverser.Traverser.Ret
-import com.github.fabianmurariu.g4s.sparse.grb.Diag
 import com.github.fabianmurariu.g4s.traverser.LogicalPlan.Step
 import com.github.fabianmurariu.g4s.traverser.LogicalPlan.LoadNodes
 import com.github.fabianmurariu.g4s.traverser.LogicalPlan.Expand
