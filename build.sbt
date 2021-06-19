@@ -112,7 +112,9 @@ lazy val g4sMatrixGraph = (project in file("g4s-matrix-graph"))
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.1",
       "co.fs2" %% "fs2-core" % "2.4.4",
-      "org.typelevel" %% "cats-free" % "2.2.0"
+      "org.typelevel" %% "cats-free" % "2.2.0",
+      "org.opencypher" % "front-end-9.0" % "9.0.20210312" excludeAll(ExclusionRule(organization = "org.scala-lang")),
+      "com.lihaoyi" %% "pprint" % "0.6.6"
     )
   )
 
