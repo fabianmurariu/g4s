@@ -157,7 +157,7 @@ class LogicNodeSpec extends munit.FunSuite {
         Filter(
           Expand(
             GetNodes(Seq("D"), Some(Binding("d"))),
-            GetEdges(Seq("Y")),
+            GetEdges(Seq("Y"), transpose = true),
             true
           ),
           GetNodes(Seq("C"), Some(Binding("c")))
@@ -197,7 +197,7 @@ class LogicNodeSpec extends munit.FunSuite {
           Filter(
             Expand(
               Diag(GetNodes(Seq("D"), Some(Binding("d")))),
-              GetEdges(Seq("Y")),
+              GetEdges(Seq("Y"), transpose = true),
               true
             ),
             GetNodes(Seq("C"), Some(Binding("c")))

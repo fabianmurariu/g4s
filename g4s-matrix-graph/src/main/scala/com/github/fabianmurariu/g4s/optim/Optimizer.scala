@@ -1,39 +1,43 @@
 package com.github.fabianmurariu.g4s.optim
 
-object Optimizer {
+import cats.implicits._
+import cats.effect.Sync
+import alleycats.std.iterable._
+import cats.data.StateT
 
-  private def initMemo(qg: QueryGraph): Memo = {
-    val rootPlans = qg.returns.map(LogicNode.fromQueryGraph(qg)).collect{case Right(p) => p}
-    val memo = new Memo(rootPlans)
-    rootPlans.foldLeft(memo) {
-      case (memo, logicPlan) =>
-        memo.doEnqueuePlan(logicPlan)
-        memo
-    }
+class Optimizer[F[_]: Sync](rules: Vector[Rule[F]]) {
 
-    memo
+  private def initMemo(qg: QueryGraph): F[Memo[F]] = {
+
+    val rootPlans: Map[Binding, LogicNode] = qg.returns
+      .map(name => LogicNode.fromQueryGraph(qg)(name).map((name, _)))
+      .collect {
+        case Right((name: Binding, p)) => name -> p
+      }
+      .toMap
+
+    for {
+      memo <- Memo(rootPlans)
+      m <- rootPlans.values.foldM(memo) { (m, logicalPlan) =>
+        m.doEnqueuePlan(logicalPlan).map(_ => m)
+      }
+    } yield m
   }
 
-  // def optimize(qg: QueryGraph, rules: Vector[Rule]): Memo = {
-  //     val memo = initMemo(qg)
-  //     val root = memo.rootPlans.head
-  //     def expandGroup()
-  //     for (rule <- rules) {
+  def optimize(qg: QueryGraph): StateT[F, EvaluatorGraph[F], Memo[F]] = {
+    val memo: StateT[F, EvaluatorGraph[F], Memo[F]] = StateT.liftF(initMemo(qg))
 
-  //         if (rule.isDefinedAt()) {}
-  //     }
-  //     memo
-  // }
+    def loop(m: Memo[F]): StateT[F, EvaluatorGraph[F], Memo[F]] =
+      StateT.liftF(m.isDone).flatMap {
+        case true => StateT.liftF(Sync[F].unit).map(_ => m)
+        case false =>
+          StateT
+            .liftF(m.pop)
+            .flatMap(_.exploreGroup(rules))
+            .flatMap(_ => loop(m))
+      }
 
-}
-
-sealed trait Rule extends PartialFunction[GroupMember, Seq[GroupMember]] {
-
-  override def apply(v1: GroupMember): Seq[GroupMember] = Seq.empty
-
-  override def isDefinedAt(x: GroupMember): Boolean = false
+    memo.flatMap(loop)
+  }
 
 }
-
-trait ImplementationRule extends Rule
-trait TransformationRule extends Rule

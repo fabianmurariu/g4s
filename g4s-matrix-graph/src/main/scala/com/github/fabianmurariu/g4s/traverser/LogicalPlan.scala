@@ -1,6 +1,6 @@
 package com.github.fabianmurariu.g4s.traverser
 
-import com.github.fabianmurariu.g4s.traverser.Traverser.QGEdges
+import Traverser.QGEdges
 
 import scala.collection.mutable
 

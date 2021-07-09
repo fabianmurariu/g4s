@@ -8,11 +8,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
   GRB,
   GrBSemiring
 }
-import com.github.fabianmurariu.g4s.sparse.grbv2.{
-  GrBMatrix,
-  MxM,
-  Diag
-}
+import com.github.fabianmurariu.g4s.sparse.grbv2.{GrBMatrix, MxM, Diag}
 import com.github.fabianmurariu.g4s.traverser._
 
 import scala.reflect.runtime.universe.{
@@ -119,7 +115,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
           arr.map(ArrayBuffer(_))
         case Return2(first, second) =>
           Array.tabulate(first.length) { i => ArrayBuffer(first(i), second(i)) }
-        case ReturnN(table) => 
+        case ReturnN(table) =>
           table.toArray
       }
       .map(arr => Chunk.array(arr))
@@ -129,6 +125,29 @@ class ConcurrentDirectedGraph[F[_], V, E](
         ids.foldMapA(id => getV(id).map { case Some(v) => Vector(v) })
       }
 
+  }
+
+  def lookupEdges(
+      tpe: String,
+      transpose: Boolean
+  ): F[(BlockingMatrix[F, Boolean], Long)] = transpose match {
+    case true =>
+      for {
+       mat <- edgeTypesTranspose.getOrCreate(tpe)
+       card <- mat.use(_.nvals)
+      } yield (mat, card)
+    case false =>
+      for {
+       mat <- edgeTypes.getOrCreate(tpe)
+       card <- mat.use(_.nvals)
+      } yield (mat, card)
+  }
+
+  def lookupNodes(tpe:String):F[(BlockingMatrix[F, Boolean], Long)] = {
+    for {
+      mat <- nodeLabels.getOrCreate(tpe)
+      card <- mat.use(_.nvals)
+    } yield (mat, card)
   }
 
   def foldEvalPlan(
@@ -181,7 +200,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
         filterMat <- matMul(expandMat, Releasable(selectMat))
       } yield (ctx2, filterMat)
 
-    case Select(step)                            =>
+    case Select(step) =>
       for {
         selectS <- F.delay(step.deref.get)
 
@@ -195,7 +214,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
       for {
         leftPlan <- F.delay(left.deref.get)
         rightPlan <- F.delay(right.deref.get)
-        _ <- F.delay{
+        _ <- F.delay {
           println(s"LEFT ${leftPlan.row}, ${leftPlan.column}")
           println(s"RIGHT ${rightPlan.row}, ${rightPlan.column}")
         }
@@ -212,7 +231,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
       for {
         tplsA <- GrBTuples.fromGrBExtract(aMat.extract)
         tplsB <- GrBTuples.fromGrBExtract(bMat.extract)
-        _ <- F.delay{
+        _ <- F.delay {
           println(tplsA.show)
           println(tplsB.show)
         }

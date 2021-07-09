@@ -8,6 +8,9 @@ import cats.implicits._
 import com.github.fabianmurariu.g4s.graph.BlockingMatrix
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import com.github.fabianmurariu.g4s.optim.Name
+import com.github.fabianmurariu.g4s.optim.LogicMemoRef
+import cats.Monad
+import cats.effect.IO
 
 /**
   * base class for push operators
@@ -39,6 +42,24 @@ trait Operator[F[_]] {
     * how much stuff do we expect to produce
     */
   def cardinality: Long
+}
+
+/**
+  * A placeholder operator
+  * pointing to the memo
+  * entry of the actual phisical
+  * operator
+  * */
+case class RefOperator[F[_]: Monad](logic: LogicMemoRef[F]) extends Operator[F] {
+
+  override def eval(cb: Record => F[Unit]): F[Unit] = Monad[F].unit
+
+  override def sorted: Option[Name] = logic.sorted
+
+  override def cover: Set[Name] = logic.output
+
+  override def cardinality: Long = -1
+
 }
 
 sealed trait EdgeMatrix[F[_]] extends Operator[F]
@@ -77,10 +98,11 @@ case class GetEdgeMatrix[F[_]](
 
 case class Expand[F[_]](
     frontier: Operator[F],
-    edges: EdgeMatrix[F],
-    semiRing: GrBSemiring[Boolean, Boolean, Boolean]
+    edges: Operator[F],
 )(implicit F: Sync[F], G: GRB)
     extends Operator[F] {
+
+  val semiRing = Expand.staticAnyPairSemiring
 
   override def eval(cb: Record => F[Unit]): F[Unit] = {
     frontier.eval {
@@ -130,4 +152,25 @@ case class Expand[F[_]](
 
   override def cardinality: Long = frontier.cardinality * edges.cardinality
 
+}
+
+object Expand {
+  import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
+  /**
+   * Acquire a single ANY_PAIR semiring and use it
+   * it should have no state thus no reason
+   * to cause undefined behaviour when
+   * shared between threads
+   * */
+  lazy val staticAnyPairSemiring: GrBSemiring[Boolean, Boolean, Boolean] = {
+    val (semi, shutdown) = GrBSemiring.anyPair[IO].allocated.unsafeRunSync()
+    Runtime
+      .getRuntime()
+      .addShutdownHook(new Thread() {
+        override def run: Unit = {
+          shutdown.unsafeRunSync()
+        }
+      })
+    semi
+  }
 }

@@ -1,6 +1,7 @@
 package com.github.fabianmurariu.g4s.optim
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.hashing.MurmurHash3
 
 abstract class LogicNode(
     cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty
@@ -9,6 +10,12 @@ abstract class LogicNode(
   def sorted: Option[Name]
   // the binding outputs of the logical operator
   def output: Set[Name]
+
+  val signature: Int =
+    MurmurHash3.orderedHash(Array(
+                              this.getClass(),
+                              MurmurHash3.unorderedHash(children.map(_.signature))
+                            ))
 
 }
 
@@ -26,7 +33,7 @@ case class GetNodes(label: Seq[String], sorted: Option[Name] = None)
   def output: Set[Name] = sorted.toSet
 }
 
-case class GetEdges(tpe: Seq[String], sorted: Option[Name] = None)
+case class GetEdges(tpe: Seq[String], sorted: Option[Name] = None, transpose:Boolean = false)
     extends LogicNode(ArrayBuffer.empty[LogicNode]) {
   def output: Set[Name] = Set.empty
 }
@@ -75,8 +82,8 @@ case class Diag(node: LogicNode) extends LogicNode(ArrayBuffer(node)) {
 
 }
 
-case class LogicMemoRef(group: Group)
-    extends LogicNode(ArrayBuffer(group.equivalentExprs(0).logic)) {
+case class LogicMemoRef[F[_]](group: Group[F])
+    extends LogicNode(ArrayBuffer(group.logic)) {
 
   override def sorted: Option[Name] = plan.sorted
 
@@ -105,10 +112,11 @@ object LogicNode {
         seen: mutable.Set[Node]
     ) = {
       val from = dfsInner(child, seen + root)
-      def edges = GetEdges(edge.types, None)
+      val t = transposed(child, root)
+      def edges = GetEdges(edge.types, None, t)
+
       val to = GetNodes(root.labels, Some(root.name))
 
-      val t = transposed(child, root)
       Filter(Expand(from, edges, t), to)
     }
 
@@ -119,8 +127,9 @@ object LogicNode {
         seen: mutable.Set[Node]
     ) = {
       val from = dfsInner(child, seen + root)
+      val t = transposed(child, root)
       val to = GetNodes(root.labels, Some(root.name))
-      val edges = GetEdges(edge.types, None)
+      val edges = GetEdges(edge.types, None, t)
 
       val right = Filter(Expand(Diag(from), edges, true), to)
       JoinPath(left = from, right = right, on = right.sorted)
