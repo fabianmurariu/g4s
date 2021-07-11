@@ -9,7 +9,6 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
   GrBSemiring
 }
 import com.github.fabianmurariu.g4s.sparse.grbv2.{GrBMatrix, MxM, Diag}
-import com.github.fabianmurariu.g4s.traverser._
 
 import scala.reflect.runtime.universe.{
   Traverser => _,
@@ -23,14 +22,6 @@ import cats.effect.concurrent.Ref
 import com.github.fabianmurariu.g4s.sparse.grb.GrBInvalidIndex
 import cats.data.State
 import scala.collection.mutable
-import com.github.fabianmurariu.g4s.traverser.Traverser.QGEdges
-import com.github.fabianmurariu.g4s.traverser.Traverser.Ret
-import com.github.fabianmurariu.g4s.traverser.LogicalPlan.Step
-import com.github.fabianmurariu.g4s.traverser.LogicalPlan.LoadNodes
-import com.github.fabianmurariu.g4s.traverser.LogicalPlan.Expand
-import com.github.fabianmurariu.g4s.traverser.LogicalPlan.Filter
-import com.github.fabianmurariu.g4s.traverser.LogicalPlan.InnerJoin
-import com.github.fabianmurariu.g4s.traverser.LogicalPlan.Select
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -52,80 +43,11 @@ class ConcurrentDirectedGraph[F[_], V, E](
   case class UnReleasable(g: BlockingMatrix[F, Boolean]) extends PlanOutput
   case class IdTable(table: Seq[ArrayBuffer[Long]]) extends PlanOutput
 
-  type QueryGraph = mutable.Map[NodeRef, QGEdges]
-  type Plans = Map[NodeRef, PlanOutput]
-  type Context = Ref[F, Plans]
-
   sealed trait IdScan
   case class Return1(ret: Array[Long]) extends IdScan
   case class Return2(ret1: Array[Long], ret2: Array[Long]) extends IdScan
   case class ReturnN(ret: Seq[ArrayBuffer[Long]]) extends IdScan
 
-  def resolveTraverser(
-      t: State[QueryGraph, Ret]
-  ): fs2.Stream[F, Vector[V]] = {
-
-    val (qg, ret: Ret) = t.run(mutable.Map.empty[NodeRef, QGEdges]).value
-
-    val plans = LogicalPlan.compilePlans(qg)(ret.ns)
-    val fullPlan = LogicalPlan.joinPlans(plans)
-
-    val planMat: F[IdScan] =
-      Ref.of(Map.empty[NodeRef, PlanOutput]).flatMap {
-        context: Ref[F, Map[NodeRef, PlanOutput]] =>
-          (F.delay(fullPlan.deref.get) >>= foldEvalPlan(context)).flatMap {
-            case (_, IdTable(rows)) =>
-              F.delay(ReturnN(rows))
-            case (_, Releasable(mat)) if ret.ns.size == 1 =>
-              // we were able to get the output in just one matrix
-              // this means the numer of outpus is 1
-              mat.extract.map { tuples =>
-                if (fullPlan.map(p => p.row.contains(ret.ns.head))) {
-                  // the output is on the row side
-                  Return1(tuples._1)
-                } else {
-                  // the output is on the column side
-                  Return1(tuples._2)
-                }
-              }
-            case (_, Releasable(mat)) if ret.ns.size == 2 =>
-              // we were able to get the output in just one matrix
-              // this means the numer of outpus is 2
-              // need to identify on what axis is the
-              val outputOnRow = fullPlan.map(step => step.row)
-              val outputOnColumn = fullPlan.map(step => step.column)
-
-              mat.extract.map { tuples =>
-                if (outputOnRow(ret.ns.head) && outputOnColumn(ret.ns.last)) {
-                  // first ret is on row, second is on column
-                  Return2(tuples._1, tuples._2)
-                } else {
-                  // first ret is on column, second is on row
-                  Return2(tuples._2, tuples._1)
-                }
-              }
-          }
-      }
-
-    // this code works for a single return
-    fs2.Stream
-      .eval(planMat)
-      .map {
-        case Return1(arr) =>
-          arr.map(ArrayBuffer(_))
-        case Return2(first, second) =>
-          Array.tabulate(first.length) { i => ArrayBuffer(first(i), second(i)) }
-        case ReturnN(table) =>
-          table.toArray
-      }
-      .map(arr => Chunk.array(arr))
-      .flatMap(fs2.Stream.chunk)
-      .map(_.toVector)
-      .evalMap { ids =>
-        ids.foldMapA(id => getV(id).map { case Some(v) => Vector(v) })
-      }
-
-  }
 
   def lookupEdges(
       tpe: String,
@@ -148,82 +70,6 @@ class ConcurrentDirectedGraph[F[_], V, E](
       mat <- nodeLabels.getOrCreate(tpe)
       card <- mat.use(_.nvals)
     } yield (mat, card)
-  }
-
-  def foldEvalPlan(
-      context: Context
-  )(step: Step): F[(Context, PlanOutput)] = step match {
-    case LoadNodes(ref) =>
-      nodeLabels.getOrCreate(ref.name).map(m => context -> UnReleasable(m))
-    case Expand(from, to, true) =>
-      for {
-        fromS <- F.delay(from.deref.get)
-        a <- foldEvalPlan(context)(fromS)
-        (ctx1, fromMat) = a
-        edgeMat <- edgeTypesTranspose.getOrCreate(to)
-
-        expMat <- matMul(fromMat, UnReleasable(edgeMat))
-      } yield (ctx1, expMat)
-
-    case Expand(from, to, false) =>
-      for {
-        fromS <- F.delay(from.deref.get)
-        a <- foldEvalPlan(context)(fromS)
-        (ctx1, fromMat) = a
-        edgeMat <- edgeTypes.getOrCreate(to)
-
-        expMat <- matMul(fromMat, UnReleasable(edgeMat))
-      } yield (ctx1, expMat)
-    case Filter(expand, LoadNodes(n)) =>
-      for {
-        expandS <- F.delay(expand.deref.get)
-        a <- foldEvalPlan(context)(expandS)
-        (ctx1, expandMat) = a
-        nodeMat <- nodeLabels.getOrCreate(n.name)
-        filterMat <- matMul(expandMat, UnReleasable(nodeMat))
-      } yield (ctx1, filterMat)
-
-    case Filter(expand, Select(step)) =>
-      for {
-        // expand step
-        expandS <- F.delay(expand.deref.get)
-        left <- foldEvalPlan(context)(expandS)
-        (ctx1, expandMat) = left
-
-        selectS <- F.delay(step.deref.get)
-        right <- foldEvalPlan(ctx1)(selectS)
-        (ctx2, subMat) = right
-
-        selectMat <- expandToFilter(subMat)
-        _ <- selectMat.show().map(println)
-        // apply filter mat
-        filterMat <- matMul(expandMat, Releasable(selectMat))
-      } yield (ctx2, filterMat)
-
-    case Select(step) =>
-      for {
-        selectS <- F.delay(step.deref.get)
-
-        right <- foldEvalPlan(context)(selectS)
-        (ctx, mat) = right
-        selectMat <- expandToFilter(mat)
-      } yield (ctx, Releasable(selectMat))
-
-    case InnerJoin(left, right) if left == right => ???
-    case InnerJoin(left, right) =>
-      for {
-        leftPlan <- F.delay(left.deref.get)
-        rightPlan <- F.delay(right.deref.get)
-        _ <- F.delay {
-          println(s"LEFT ${leftPlan.row}, ${leftPlan.column}")
-          println(s"RIGHT ${rightPlan.row}, ${rightPlan.column}")
-        }
-        l <- foldEvalPlan(context)(leftPlan)
-        (ctx1, lMat) = l
-        r <- foldEvalPlan(context)(rightPlan)
-        (ctx2, rMat) = r
-        out <- joinResults(lMat, rMat)
-      } yield (ctx2, out)
   }
 
   def joinResults(a: PlanOutput, b: PlanOutput): F[PlanOutput] = (a, b) match {

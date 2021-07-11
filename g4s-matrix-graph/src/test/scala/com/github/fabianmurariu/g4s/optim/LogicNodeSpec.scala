@@ -148,17 +148,17 @@ class LogicNodeSpec extends munit.FunSuite {
       Vector(
         Filter(
           Expand(
-            GetNodes(Seq("A"), Some(Binding("a"))),
-            GetEdges(Seq("X")),
-            false
+            GetNodes(Seq("D"), Some(Binding("d"))),
+            GetEdges(Seq("Y"), transpose = true),
+            true
           ),
           GetNodes(Seq("C"), Some(Binding("c")))
         ),
         Filter(
           Expand(
-            GetNodes(Seq("D"), Some(Binding("d"))),
-            GetEdges(Seq("Y"), transpose = true),
-            true
+            GetNodes(Seq("A"), Some(Binding("a"))),
+            GetEdges(Seq("X")),
+            false
           ),
           GetNodes(Seq("C"), Some(Binding("c")))
         )
@@ -184,14 +184,6 @@ class LogicNodeSpec extends munit.FunSuite {
     val expected = JoinFork(
       GetNodes(Seq("C"), Some(Binding("c"))),
       Vector(
-        Filter(
-          Expand(
-            GetNodes(Seq("A"), Some(Binding("a"))),
-            GetEdges(Seq("X")),
-            false
-          ),
-          GetNodes(Seq("C"), Some(Binding("c")))
-        ),
         JoinPath(
           GetNodes(Seq("D"), Some(Binding("d"))),
           Filter(
@@ -203,6 +195,14 @@ class LogicNodeSpec extends munit.FunSuite {
             GetNodes(Seq("C"), Some(Binding("c")))
           ),
           on = Some(Binding("d"))
+        ),
+        Filter(
+          Expand(
+            GetNodes(Seq("A"), Some(Binding("a"))),
+            GetEdges(Seq("X")),
+            false
+          ),
+          GetNodes(Seq("C"), Some(Binding("c")))
         )
       )
     )
