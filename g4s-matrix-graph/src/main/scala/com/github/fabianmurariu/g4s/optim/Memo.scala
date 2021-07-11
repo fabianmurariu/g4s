@@ -5,6 +5,7 @@ import cats.effect.Sync
 import cats.implicits._
 import com.github.fabianmurariu.g4s.optim.{impls => op}
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
+import org.scalameta.adt.root
 
 class Memo[F[_]: Sync](
     val rootPlans: Map[Binding, LogicNode],
@@ -23,32 +24,36 @@ class Memo[F[_]: Sync](
 
   def insertGroup(logic: LogicNode): F[Group[F]] = {
     for {
-      g <- Group(this, logic, table.size)
-      _ <- Sync[F].delay {
+      _ <- Sync[F].delay(println(s"insertGroup ${logic.signature} -> $logic"))
+      newG <- Group(this, logic, table.size)
+      g <- Sync[F].delay {
         table.getOrElseUpdate(logic.signature, {
-          val group = g
-          stack = group :: stack
-          group
+          stack = newG :: stack
+          newG
         })
       }
     } yield g
 
   }
 
-  def doEnqueuePlan(logic: LogicNode): F[Group[F]] = {
-    Sync[F].delay(logic.leaf).flatMap {
+  def doEnqueuePlan(logic: LogicNode): F[Group[F]] = logic match {
+    case ref:LogicMemoRef[F] => Sync[F].delay(ref.group)
+    case _ => 
+    Sync[F].delay(println(s"Do Enqueue Plan $logic")) >> Sync[F].delay(logic.leaf).flatMap {
       case true =>
         insertGroup(logic)
       case false =>
-        val one: F[Unit] = logic.children.toVector.zipWithIndex.foldM(()) {
-          case (_, (child, i)) =>
-            doEnqueuePlan(child).flatMap(group =>
-              Sync[F].delay {
-                logic(i) = LogicMemoRef(group)
-              }
-            )
-        }
-        one >> insertGroup(logic)
+        logic.children.toVector.zipWithIndex
+          .foldM(Vector.newBuilder[LogicMemoRef[F]]) {
+            case (builder, (child, i)) =>
+              doEnqueuePlan(child).flatMap(group =>
+                Sync[F].delay {
+                  builder += LogicMemoRef(group)
+                }
+              )
+          }
+          .map { cs => logic.asInstanceOf[ForkNode].rewire[F](cs.result()) }
+          .flatMap(insertGroup(_))
     }
   }
 
@@ -63,12 +68,15 @@ class Memo[F[_]: Sync](
     def optimPhysicalPlan(signature: Int): F[op.Operator[F]] =
       for {
         grp <- Sync[F].delay(table(signature))
-        minGroupMember <- grp.optGroupMember
+        minGroupMember <- {
+          println(s"Optim Physical Plan, $grp, ${grp.optMember}")
+          grp.optGroupMember
+        }
         plan <- minGroupMember.physical
       } yield plan
 
     val localOptimPlan = for {
-      logic <- Sync[F].delay(rootPlans(name))
+      logic <- Sync[F].delay ( rootPlans(name) )
       plan <- optimPhysicalPlan(logic.signature)
     } yield plan
 
@@ -77,11 +85,11 @@ class Memo[F[_]: Sync](
         Sync[F].raiseError(
           new IllegalStateException("Local Optimal plan cannot be RefOperator")
         )
-      case op.Expand(from: op.RefOperator[F], to: op.RefOperator[F]) =>
+      case op.MatrixMul(from: op.RefOperator[F], to: op.RefOperator[F]) =>
         for {
           optimFrom <- optimPhysicalPlan(from.logic.signature)
           optimTo <- optimPhysicalPlan(to.logic.signature)
-        } yield op.Expand(optimFrom, optimTo)
+        } yield op.MatrixMul(optimFrom, optimTo)
       case op => Sync[F].delay(op)
     }
 

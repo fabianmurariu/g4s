@@ -77,7 +77,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val g4s = (project in file("."))
-  .aggregate(g4sSparse, g4sMatrixGraph, docs)
+  .aggregate(g4sSparse, g4sOptim, g4sMatrixGraph, docs)
   .settings(
     name := "g4s"
   )
@@ -101,6 +101,20 @@ lazy val docs = project // new documentation project
     // mdocOut := baseDirectory.value / ".." /"g4s-docs-site" / "docs" / "tutorial-basics",
     mdocVariables := Map(
       "VERSION" -> version.value
+    )
+  )
+
+lazy val g4sOptim = (project in file("g4s-optimizer"))
+  .enablePlugins(MUnitReportPlugin)
+  .dependsOn(g4sSparse % "test->test;compile->compile")
+  .settings(
+    commonSettings,
+    name := "g4s-optimizer",
+    libraryDependencies ++= Seq(
+      "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.1",
+      "org.opencypher" % "front-end-9.0" % "9.0.20210312" excludeAll(ExclusionRule(organization = "org.scala-lang")),
+      "com.lihaoyi" %% "pprint" % "0.6.6",
+      "dev.zio" %% "zio" % "1.0.9"
     )
   )
 

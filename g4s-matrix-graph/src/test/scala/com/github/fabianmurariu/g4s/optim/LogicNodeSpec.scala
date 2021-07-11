@@ -145,7 +145,7 @@ class LogicNodeSpec extends munit.FunSuite {
 
     val expected = JoinFork(
       GetNodes(Seq("C"), Some(Binding("c"))),
-      Set(
+      Vector(
         Filter(
           Expand(
             GetNodes(Seq("A"), Some(Binding("a"))),
@@ -171,7 +171,7 @@ class LogicNodeSpec extends munit.FunSuite {
   }
 
   test(
-    "parse a path expression with 2 returns (a:A)-[:X]->(c:C)-[:Y]->(d:D) return c,d".only
+    "parse a path expression with 2 returns (a:A)-[:X]->(c:C)-[:Y]->(d:D) return c,d"
   ) {
 
     val query =
@@ -183,7 +183,7 @@ class LogicNodeSpec extends munit.FunSuite {
 
     val expected = JoinFork(
       GetNodes(Seq("C"), Some(Binding("c"))),
-      Set(
+      Vector(
         Filter(
           Expand(
             GetNodes(Seq("A"), Some(Binding("a"))),

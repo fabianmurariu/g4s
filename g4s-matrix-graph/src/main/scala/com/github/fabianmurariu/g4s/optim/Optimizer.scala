@@ -41,3 +41,11 @@ class Optimizer[F[_]: Sync](rules: Vector[Rule[F]]) {
   }
 
 }
+object Optimizer {
+  def apply[F[_]:Sync] = new Optimizer[F](Vector(
+    new LoadEdges[F],
+    new LoadNodes[F],
+    new Filter2MxM[F],
+    new Expand2MxM[F]
+  ))
+}

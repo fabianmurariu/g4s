@@ -11,6 +11,7 @@ import com.github.fabianmurariu.g4s.optim.Name
 import com.github.fabianmurariu.g4s.optim.LogicMemoRef
 import cats.Monad
 import cats.effect.IO
+import com.vladsch.flexmark.util.ast.Block
 
 /**
   * base class for push operators
@@ -67,12 +68,12 @@ sealed trait EdgeMatrix[F[_]] extends Operator[F]
 case class GetNodeMatrix[F[_]](
     binding: Name,
     name: Option[String],
-    nodes: GrBMatrix[F, Boolean],
+    nodes: BlockingMatrix[F, Boolean],
     cardinality: Long // very likely nodes.nvals
 ) extends Operator[F] {
 
   override def eval(cb: Record => F[Unit]): F[Unit] =
-    cb(MatrixRecord(nodes))
+    cb(Nodes(nodes))
 
   override def sorted: Option[Name] = Some(binding)
 
@@ -96,7 +97,7 @@ case class GetEdgeMatrix[F[_]](
 
 }
 
-case class Expand[F[_]](
+case class MatrixMul[F[_]](
     frontier: Operator[F],
     edges: Operator[F],
 )(implicit F: Sync[F], G: GRB)
