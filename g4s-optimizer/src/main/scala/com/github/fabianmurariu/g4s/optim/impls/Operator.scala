@@ -5,7 +5,7 @@ import com.github.fabianmurariu.g4s.sparse.grbv2.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
 import cats.effect.Sync
 import cats.implicits._
-import com.github.fabianmurariu.g4s.graph.BlockingMatrix
+import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import com.github.fabianmurariu.g4s.optim.Name
 import com.github.fabianmurariu.g4s.optim.LogicMemoRef

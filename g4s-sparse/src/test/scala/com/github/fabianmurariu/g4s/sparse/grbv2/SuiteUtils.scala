@@ -17,29 +17,6 @@ trait SuiteUtils {
   }
 }
 
-trait WithDistinctBy {
-
-  implicit class DistinctByDecorator[T, F[_] <: TraversableOnce[_]](
-      val xs: F[T]
-  ) {
-    def distinctBy[A](
-        f: T => A
-    )(implicit CBF: CanBuildFrom[F[T], T, F[T]]): F[T] = {
-      val xsf = xs.asInstanceOf[TraversableOnce[T]]
-      val seen = scala.collection.mutable.HashSet.empty[A]
-      val outBuilder = CBF()
-      xsf.foreach[Unit] { t: T =>
-        val a = f(t)
-        if (!seen(a)) {
-          outBuilder += t
-          seen += a
-        }
-      }
-      outBuilder.result()
-    }
-  }
-}
-
 case class MatrixTuples[A](
     rows: Long,
     cols: Long,
@@ -47,7 +24,7 @@ case class MatrixTuples[A](
 )
 
 
-object MatrixTuples extends WithDistinctBy {
+object MatrixTuples {
 
   def genVal[T](rows: Long, cols: Long)(g: Gen[T]): Gen[(Long, Long, T)] =
     for {
@@ -82,7 +59,7 @@ case class MxMSample[T](
     c: MatrixTuples[T]
 )
 
-object MxMSample extends WithDistinctBy {
+object MxMSample {
 
   implicit def mxmSampleArb[T](
       implicit T: Arbitrary[T]
@@ -111,7 +88,7 @@ object MxMSample extends WithDistinctBy {
 
 case class VectorTuples[A](size: Long, tuples: Vector[(Long, A)])
 
-object VectorTuples extends WithDistinctBy {
+object VectorTuples {
 
   def genVal[T](size: Long)(g: Gen[T]): Gen[(Long, T)] =
     for {

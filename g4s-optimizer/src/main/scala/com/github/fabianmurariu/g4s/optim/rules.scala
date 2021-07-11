@@ -2,11 +2,11 @@ package com.github.fabianmurariu.g4s.optim
 
 import cats.implicits._
 import com.github.fabianmurariu.g4s.optim.impls.GetEdgeMatrix
-import com.github.fabianmurariu.g4s.graph.BlockingMatrix
+import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
 import cats.data.StateT
-import com.github.fabianmurariu.g4s.graph.ConcurrentDirectedGraph
 import cats.effect.Sync
 import cats.Monad
+import simulacrum.typeclass
 
 sealed trait Rule[F[_]]
     extends PartialFunction[GroupMember[F], StateT[F, EvaluatorGraph[F], List[
@@ -121,9 +121,11 @@ class LoadNodes[F[_]: Sync] extends ImplementationRule[F] {
         }
     }
 
-  override def isDefinedAt(gm: GroupMember[F]): Boolean = gm.logic.isInstanceOf[GetNodes]
+  override def isDefinedAt(gm: GroupMember[F]): Boolean =
+    gm.logic.isInstanceOf[GetNodes]
 
 }
+
 trait EvaluatorGraph[F[_]] {
   implicit def F: Sync[F]
   def lookupEdge(
@@ -131,30 +133,4 @@ trait EvaluatorGraph[F[_]] {
       transpose: Boolean
   ): F[(BlockingMatrix[F, Boolean], Long)]
   def lookupNodes(tpe: String): F[(BlockingMatrix[F, Boolean], Long)]
-}
-
-object EvaluatorGraph {
-  def apply[F[_], V, E](
-      graph: ConcurrentDirectedGraph[F, V, E]
-  )(implicit S: Sync[F]): F[EvaluatorGraph[F]] =
-    Sync[F].delay {
-      new EvaluatorGraph[F] {
-
-        override implicit def F: Sync[F] = S
-
-        override def lookupNodes(
-            tpe: String
-        ): F[(BlockingMatrix[F, Boolean], Long)] = {
-          graph.lookupNodes(tpe)
-        }
-
-        override def lookupEdge(
-            tpe: String,
-            transpose: Boolean
-        ): F[(BlockingMatrix[F, Boolean], Long)] = {
-          graph.lookupEdges(tpe, transpose)
-        }
-
-      }
-    }
 }

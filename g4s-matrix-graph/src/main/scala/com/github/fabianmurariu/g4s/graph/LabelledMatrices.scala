@@ -10,6 +10,7 @@ import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import scala.collection.JavaConverters._
 import cats.effect.concurrent.Semaphore
 import cats.effect.Resource
+import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
 
 class LabelledMatrices[F[_]](
     private[graph] val mats: ConcurrentHashMap[

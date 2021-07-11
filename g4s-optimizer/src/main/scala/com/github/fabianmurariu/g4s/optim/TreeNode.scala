@@ -5,7 +5,7 @@ import scala.collection.mutable.ArrayBuffer
 class TreeNode[T](cs: ArrayBuffer[T]) { self =>
   def children: Iterator[T] = cs.iterator
 
-  def childrenCol: IndexedSeq[T] = cs
+  def childrenCol = cs
 
   def leaf: Boolean = cs.isEmpty
 

@@ -20,9 +20,12 @@ import fs2.Chunk
 import scala.reflect.ClassTag
 import cats.effect.concurrent.Ref
 import com.github.fabianmurariu.g4s.sparse.grb.GrBInvalidIndex
+import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
 import cats.data.State
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import com.github.fabianmurariu.g4s.optim.EvaluatorGraph
+import cats.effect.Sync
 
 /**
   * Concurrent graph implementation
@@ -41,13 +44,12 @@ class ConcurrentDirectedGraph[F[_], V, E](
   sealed trait PlanOutput
   case class Releasable(g: GrBMatrix[F, Boolean]) extends PlanOutput
   case class UnReleasable(g: BlockingMatrix[F, Boolean]) extends PlanOutput
-  case class IdTable(table: Seq[ArrayBuffer[Long]]) extends PlanOutput
+  case class IdTable(table: Iterable[ArrayBuffer[Long]]) extends PlanOutput
 
   sealed trait IdScan
   case class Return1(ret: Array[Long]) extends IdScan
   case class Return2(ret1: Array[Long], ret2: Array[Long]) extends IdScan
   case class ReturnN(ret: Seq[ArrayBuffer[Long]]) extends IdScan
-
 
   def lookupEdges(
       tpe: String,
@@ -55,17 +57,17 @@ class ConcurrentDirectedGraph[F[_], V, E](
   ): F[(BlockingMatrix[F, Boolean], Long)] = transpose match {
     case true =>
       for {
-       mat <- edgeTypesTranspose.getOrCreate(tpe)
-       card <- mat.use(_.nvals)
+        mat <- edgeTypesTranspose.getOrCreate(tpe)
+        card <- mat.use(_.nvals)
       } yield (mat, card)
     case false =>
       for {
-       mat <- edgeTypes.getOrCreate(tpe)
-       card <- mat.use(_.nvals)
+        mat <- edgeTypes.getOrCreate(tpe)
+        card <- mat.use(_.nvals)
       } yield (mat, card)
   }
 
-  def lookupNodes(tpe:String):F[(BlockingMatrix[F, Boolean], Long)] = {
+  def lookupNodes(tpe: String): F[(BlockingMatrix[F, Boolean], Long)] = {
     for {
       mat <- nodeLabels.getOrCreate(tpe)
       card <- mat.use(_.nvals)
@@ -285,4 +287,28 @@ object ConcurrentDirectedGraph {
       semiRing,
       ds
     )
+
+  def evaluatorGraph[F[_], V, E](
+      graph: ConcurrentDirectedGraph[F, V, E]
+  )(implicit S: Sync[F]): F[EvaluatorGraph[F]] =
+    Sync[F].delay {
+      new EvaluatorGraph[F] {
+
+        override implicit def F: Sync[F] = S
+
+        override def lookupNodes(
+            tpe: String
+        ): F[(BlockingMatrix[F, Boolean], Long)] = {
+          graph.lookupNodes(tpe)
+        }
+
+        override def lookupEdge(
+            tpe: String,
+            transpose: Boolean
+        ): F[(BlockingMatrix[F, Boolean], Long)] = {
+          graph.lookupEdges(tpe, transpose)
+        }
+
+      }
+    }
 }

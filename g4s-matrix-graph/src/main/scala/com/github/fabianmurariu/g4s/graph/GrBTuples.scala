@@ -24,7 +24,7 @@ class GrBTuples(val is: Array[Long], val js: Array[Long]) {
 
   }
 
-  def asRows: Seq[ArrayBuffer[Long]] = 
+  def asRows: Iterable[ArrayBuffer[Long]] = 
     (is, js).zipped.map{case (i, j) => ArrayBuffer(i, j)}
 
 }
@@ -114,7 +114,7 @@ object GrBTuples {
     out.result()
   }
 
-  def rowJoinOnBinarySearch(left: Seq[ArrayBuffer[Long]], leftColumn: Int, right: GrBTuples): Seq[ArrayBuffer[Long]] = {
+  def rowJoinOnBinarySearch(left: Iterable[ArrayBuffer[Long]], leftColumn: Int, right: GrBTuples): Iterable[ArrayBuffer[Long]] = {
 
     left.flatMap{
       row => 

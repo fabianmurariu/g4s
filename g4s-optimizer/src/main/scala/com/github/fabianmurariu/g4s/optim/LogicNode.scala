@@ -4,7 +4,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.hashing.MurmurHash3
 
 abstract class LogicNode(
-    cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty
+    cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty // FIXME: this could change in the future
 ) extends TreeNode[LogicNode](cs) { self =>
   // the left most binding
   def sorted: Option[Name]
@@ -29,7 +29,7 @@ sealed abstract class ForkNode(
   def rewire[F[_]](children:Vector[LogicMemoRef[F]]): LogicNode
 }
 
-case class Return(rets: LogicNode*) extends LogicNode(rets.to[ArrayBuffer]) {
+case class Return(rets: LogicNode*) extends LogicNode(rets.to(ArrayBuffer)) {
 
   override def sorted: Option[Name] = None
 
@@ -86,7 +86,7 @@ case class JoinPath(
 case class JoinFork(
     to: LogicNode, // root of this tree
     cs: Seq[LogicNode] // children
-) extends ForkNode(to +: cs.to[ArrayBuffer]) {
+) extends ForkNode(to +: cs.to(ArrayBuffer)) {
 
   override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
       JoinFork(children(0), children.tail)

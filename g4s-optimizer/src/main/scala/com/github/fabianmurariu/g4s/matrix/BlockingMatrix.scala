@@ -1,4 +1,4 @@
-package com.github.fabianmurariu.g4s.graph
+package com.github.fabianmurariu.g4s.matrix
 
 import cats.implicits._
 import cats.effect.{Concurrent, Resource}

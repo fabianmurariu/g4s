@@ -1,7 +1,7 @@
 package com.github.fabianmurariu.g4s.optim.impls
 
 import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
-import com.github.fabianmurariu.g4s.graph.BlockingMatrix
+import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
 
 sealed trait Record 
 
