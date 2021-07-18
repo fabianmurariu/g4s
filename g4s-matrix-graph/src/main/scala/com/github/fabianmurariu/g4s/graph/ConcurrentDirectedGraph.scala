@@ -1,6 +1,5 @@
 package com.github.fabianmurariu.g4s.graph
 
-import cats.Parallel
 import cats.effect.{Concurrent, Resource}
 import cats.implicits._
 import com.github.fabianmurariu.g4s.sparse.grb.{
@@ -21,8 +20,6 @@ import scala.reflect.ClassTag
 import cats.effect.concurrent.Ref
 import com.github.fabianmurariu.g4s.sparse.grb.GrBInvalidIndex
 import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
-import cats.data.State
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import com.github.fabianmurariu.g4s.optim.EvaluatorGraph
 import cats.effect.Sync
@@ -39,7 +36,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
     nodeLabels: LabelledMatrices[F],
     semiRing: GrBSemiring[Boolean, Boolean, Boolean],
     ds: DataStore[F, V, E]
-)(implicit F: Concurrent[F], P: Parallel[F], G: GRB) { self =>
+)(implicit val F:Sync[F], G: GRB) extends EvaluatorGraph[F]{ self =>
 
   sealed trait PlanOutput
   case class Releasable(g: GrBMatrix[F, Boolean]) extends PlanOutput
@@ -74,43 +71,43 @@ class ConcurrentDirectedGraph[F[_], V, E](
     } yield (mat, card)
   }
 
-  def joinResults(a: PlanOutput, b: PlanOutput): F[PlanOutput] = (a, b) match {
-    case (Releasable(aMat), Releasable(bMat)) =>
-      for {
-        tplsA <- GrBTuples.fromGrBExtract(aMat.extract)
-        tplsB <- GrBTuples.fromGrBExtract(bMat.extract)
-        _ <- F.delay {
-          println(tplsA.show)
-          println(tplsB.show)
-        }
-        out <- F.delay {
-          GrBTuples.rowJoinOnBinarySearch(tplsA.asRows, 1, tplsB)
-        }
-      } yield IdTable(out)
-  }
+  // def joinResults(a: PlanOutput, b: PlanOutput): F[PlanOutput] = (a, b) match {
+  //   case (Releasable(aMat), Releasable(bMat)) =>
+  //     for {
+  //       tplsA <- GrBTuples.fromGrBExtract(aMat.extract)
+  //       tplsB <- GrBTuples.fromGrBExtract(bMat.extract)
+  //       _ <- F.delay {
+  //         println(tplsA.show)
+  //         println(tplsB.show)
+  //       }
+  //       out <- F.delay {
+  //         GrBTuples.rowJoinOnBinarySearch(tplsA.asRows, 1, tplsB)
+  //       }
+  //     } yield IdTable(out)
+  // }
 
-  def matMul(a: PlanOutput, b: PlanOutput): F[PlanOutput] = (a, b) match {
-    case (Releasable(from), Releasable(to)) =>
-      F.bracket(F.pure(from)) { from => MxM[F].mxm(to)(from, to)(semiRing) }(
-          _.release
-        )
-        .map(Releasable)
-    case (UnReleasable(fromBM), UnReleasable(toBM)) =>
-      fromBM.use { from =>
-        toBM.use { to =>
-          for {
-            shape <- to.shape
-            (rows, cols) = shape
-            out <- GrBMatrix.unsafe[F, Boolean](rows, cols)
-            output <- MxM[F].mxm(out)(from, to)(semiRing)
-          } yield Releasable(output)
-        }
-      }
-    case (UnReleasable(fromBM), Releasable(to)) =>
-      fromBM.use { from => MxM[F].mxm(to)(from, to)(semiRing) }.map(Releasable)
-    case (Releasable(from), UnReleasable(toBM)) =>
-      toBM.use { to => MxM[F].mxm(from)(from, to)(semiRing) }.map(Releasable)
-  }
+  // def matMul(a: PlanOutput, b: PlanOutput): F[PlanOutput] = (a, b) match {
+  //   case (Releasable(from), Releasable(to)) =>
+  //     F.bracket(F.pure(from)) { from => MxM[F].mxm(to)(from, to)(semiRing) }(
+  //         _.release
+  //       )
+  //       .map(Releasable)
+  //   case (UnReleasable(fromBM), UnReleasable(toBM)) =>
+  //     fromBM.use { from =>
+  //       toBM.use { to =>
+  //         for {
+  //           shape <- to.shape
+  //           (rows, cols) = shape
+  //           out <- GrBMatrix.unsafe[F, Boolean](rows, cols)
+  //           output <- MxM[F].mxm(out)(from, to)(semiRing)
+  //         } yield Releasable(output)
+  //       }
+  //     }
+  //   case (UnReleasable(fromBM), Releasable(to)) =>
+  //     fromBM.use { from => MxM[F].mxm(to)(from, to)(semiRing) }.map(Releasable)
+  //   case (Releasable(from), UnReleasable(toBM)) =>
+  //     toBM.use { to => MxM[F].mxm(from)(from, to)(semiRing) }.map(Releasable)
+  // }
 
   def grbEval(
       output: GrBMatrix[F, Boolean],
@@ -238,10 +235,10 @@ class ConcurrentDirectedGraph[F[_], V, E](
       implicit tt: TypeTag[T]
   ): F[Unit] = {
     val tpe = tt.tpe.toString
-    edges.use(update(src, dst)) &> // update edges
-      edgesTranspose.use(update(dst, src)) &> // update edges transpose
-      (edgeTypes.getOrCreate(tpe) >>= (_.use(update(src, dst)))) &> // update edges for type
-      (edgeTypesTranspose.getOrCreate(tpe) >>= (_.use(update(dst, src)))) &> // update edges for type
+    edges.use(update(src, dst)) *>  // update edges
+      edgesTranspose.use(update(dst, src)) *> // update edges transpose
+      (edgeTypes.getOrCreate(tpe) >>= (_.use(update(src, dst)))) *> // update edges for type
+      (edgeTypesTranspose.getOrCreate(tpe) >>= (_.use(update(dst, src)))) *> // update edges for type
       ds.persistE(src, dst, e) // write the edge to the datastore
   }
 
@@ -261,7 +258,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
 }
 
 object ConcurrentDirectedGraph {
-  def apply[F[_]: Parallel: Concurrent, V, E](
+  def apply[F[_]: Concurrent, V, E](
       implicit G: GRB,
       CT: ClassTag[V]
   ): Resource[F, ConcurrentDirectedGraph[F, V, E]] =
@@ -288,13 +285,11 @@ object ConcurrentDirectedGraph {
       ds
     )
 
-  def evaluatorGraph[F[_], V, E](
-      graph: ConcurrentDirectedGraph[F, V, E]
-  )(implicit S: Sync[F]): F[EvaluatorGraph[F]] =
-    Sync[F].delay {
+  def evaluatorGraph[F[_]:Concurrent, V:ClassTag, E](implicit G: GRB): Resource[F, EvaluatorGraph[F]] =
+    apply[F, V, E].map { graph => 
       new EvaluatorGraph[F] {
 
-        override implicit def F: Sync[F] = S
+        override implicit val F: Sync[F] = Sync[F]
 
         override def lookupNodes(
             tpe: String
@@ -302,7 +297,7 @@ object ConcurrentDirectedGraph {
           graph.lookupNodes(tpe)
         }
 
-        override def lookupEdge(
+        override def lookupEdges(
             tpe: String,
             transpose: Boolean
         ): F[(BlockingMatrix[F, Boolean], Long)] = {

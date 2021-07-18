@@ -13,7 +13,6 @@ class GrBRangeSpec extends munit.FunSuite {
   }
 
   test("generate stride range of step 2") {
-    GrBRangeLike.scalaRange
     val (ni, i) = GrBRangeLike[NumericRange[Long]].toGrB(0L until 10L by 2)
     assertEquals(ni, GRBCORE.GxB_STRIDE)
     assertEquals(i.toVector, Vector(0L, 9L, 2L))

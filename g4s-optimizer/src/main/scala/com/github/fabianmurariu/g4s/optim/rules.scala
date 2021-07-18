@@ -84,7 +84,7 @@ class LoadEdges[F[_]: Sync] extends ImplementationRule[F] {
     gm.logic match {
       case GetEdges((tpe: String) :: _, _, transpose) =>
         StateT.inspectF { g: EvaluatorGraph[F] =>
-          g.lookupEdge(tpe, transpose).map {
+          g.lookupEdges(tpe, transpose).map {
             case (mat, card) =>
               val physical: op.Operator[F] =
                 GetEdgeMatrix[F](new UnNamed, Some(tpe), mat, card)
@@ -128,7 +128,7 @@ class LoadNodes[F[_]: Sync] extends ImplementationRule[F] {
 
 trait EvaluatorGraph[F[_]] {
   implicit def F: Sync[F]
-  def lookupEdge(
+  def lookupEdges(
       tpe: String,
       transpose: Boolean
   ): F[(BlockingMatrix[F, Boolean], Long)]

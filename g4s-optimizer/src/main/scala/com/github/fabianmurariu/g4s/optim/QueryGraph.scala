@@ -40,7 +40,7 @@ object QueryGraph {
         _,
         ast.SingleQuery(
           ast.Match(_, Pattern(paths), _, _) :: ast
-            .Return(_, ast.ReturnItems(_, roots), _, _, _, _) :: _
+            .Return(_, ast.ReturnItems(_, roots, _), _, _, _, _) :: _
         )
         ) =>
       paths
@@ -60,11 +60,11 @@ object QueryGraph {
       g: QueryGraph,
       element: PatternElement
   ): Node = element match {
-    case NodePattern(None, labels, _, _) =>
+    case NodePattern(None, labels, _) =>
       val node = Node(new UnNamed)(labels.map(_.name))
       g.insert(node)
       node
-    case NodePattern(Some(Variable(name)), labels, _, _) =>
+    case NodePattern(Some(Variable(name)), labels, _) =>
       val node = Node(Binding(name))(labels.map(_.name))
       val updateNode = g.get(node) match {
         case Some(v) =>
@@ -76,7 +76,7 @@ object QueryGraph {
       updateNode
     case RelationshipChain(
         left,
-        RelationshipPattern(_, tpes, _, _, direction, _, _),
+        RelationshipPattern(_, tpes, _, _, direction, _),
         right
         ) =>
       val leftNode = patternToQueryGraph(g, left)

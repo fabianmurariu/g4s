@@ -103,7 +103,7 @@ lazy val g4sOptim = (project in file("g4s-optimizer"))
     name := "g4s-optimizer",
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.1",
-      "org.opencypher" % "front-end-9.0" % "9.0.20210312" excludeAll(
+      "org.opencypher" % "front-end-9.0" % "9.0-SNAPSHOT" excludeAll(
         ExclusionRule(organization = "org.scala-lang"),
         ExclusionRule(organization = "org.scalacheck", name= "scalacheck_2.12")
         ),
