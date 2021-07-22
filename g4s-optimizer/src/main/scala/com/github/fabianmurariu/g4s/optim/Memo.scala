@@ -5,7 +5,6 @@ import cats.effect.Sync
 import cats.implicits._
 import com.github.fabianmurariu.g4s.optim.{impls => op}
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
-import org.scalameta.adt.root
 
 class Memo[F[_]: Sync](
     val rootPlans: Map[Binding, LogicNode],
