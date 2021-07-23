@@ -8,7 +8,7 @@ import cats.effect.Sync
 class GroupMember[F[_]: Sync](
     val parent: Group[F],
     val logic: LogicNode,
-    var physic: Option[Operator[F]] = None
+    val physic: Option[Operator[F]] = None
 ) {
 
   def memo: Memo[F] = parent.memo
@@ -22,21 +22,6 @@ class GroupMember[F[_]: Sync](
       .map(rule => rule.eval(this))
       .sequence
       .map(_.flatten)
-    // rules.foldM(()) {
-    //   case (_, rule) =>
-    //     for {
-    //       newMembers <- rule.eval(this)
-    //       _ <- newMembers.foldM(()) {
-    //         case (_, newMember) =>
-    //           StateT.modifyF[F, EvaluatorGraph[F]] { g =>
-    //             for {
-    //               logic <- Sync[F].delay(newMember.logic)
-    //               _ <- memo.doEnqueuePlan(logic)
-    //             } yield g
-    //           }
-    //       }
-    //     } yield ()
-    // }
   }
 
   def cost: F[Long] = Sync[F].delay(-1L)

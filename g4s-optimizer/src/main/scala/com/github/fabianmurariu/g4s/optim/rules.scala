@@ -128,9 +128,20 @@ class LoadNodes[F[_]: Sync] extends ImplementationRule[F] {
 
 trait EvaluatorGraph[F[_]] {
   implicit def F: Sync[F]
+
+  def lookupEdges(
+      tpe: Option[String],
+      transpose: Boolean
+  ): F[(BlockingMatrix[F, Boolean], Long)]
+
   def lookupEdges(
       tpe: String,
       transpose: Boolean
-  ): F[(BlockingMatrix[F, Boolean], Long)]
-  def lookupNodes(tpe: String): F[(BlockingMatrix[F, Boolean], Long)]
+  ): F[(BlockingMatrix[F, Boolean], Long)] =
+    this.lookupEdges(Some(tpe), transpose)
+
+  def lookupNodes(tpe: Option[String]): F[(BlockingMatrix[F, Boolean], Long)]
+
+  def lookupNodes(tpe: String): F[(BlockingMatrix[F, Boolean], Long)] =
+    this.lookupNodes(Some(tpe))
 }

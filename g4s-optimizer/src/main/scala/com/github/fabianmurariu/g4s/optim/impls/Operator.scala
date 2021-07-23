@@ -12,6 +12,8 @@ import com.github.fabianmurariu.g4s.optim.LogicMemoRef
 import cats.Monad
 import cats.effect.IO
 import com.vladsch.flexmark.util.ast.Block
+import zio.ZIO
+import cats.data.StateT
 
 /**
   * base class for push operators

@@ -6,6 +6,10 @@ import cats.implicits._
 import com.github.fabianmurariu.g4s.optim.{impls => op}
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 
+trait IMemo[F[_]] {
+  def pop:F[Option[Group[F]]] 
+}
+
 class Memo[F[_]: Sync](
     val rootPlans: Map[Binding, LogicNode],
     val table: mutable.LinkedHashMap[Int, Group[F]] =
