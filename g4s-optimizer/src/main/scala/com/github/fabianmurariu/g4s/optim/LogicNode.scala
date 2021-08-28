@@ -15,7 +15,7 @@ abstract class LogicNode(
     case node => node
   }
 
-  val signature: String = this match {
+  def signature: String = this match {
     case LogicMemoRef(group) => group.logic.signature
     case node:GetNodes => node.toString()
     case node:GetEdges => node.toString()

@@ -108,7 +108,6 @@ lazy val g4sOptim = (project in file("g4s-optimizer"))
         ExclusionRule(organization = "org.scalacheck", name= "scalacheck_2.12")
         ),
       "com.lihaoyi" %% "pprint" % "0.6.6",
-      "dev.zio" %% "zio" % "1.0.9",
       "co.fs2" %% "fs2-core" % "2.4.4" // FIXME: break BlockingMatrix into some support package
     )
   )
