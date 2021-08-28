@@ -1,59 +1,71 @@
 package com.github.fabianmurariu.g4s.optim
 
 import cats.implicits._
-import cats.data.StateT
 import alleycats.std.all._
 import cats.effect.Sync
+import cats.effect.concurrent.Ref
 
 class Group[F[_]: Sync](
     val memo: Memo[F],
     val logic: LogicNode,
-    val id: Int,
-    var optMember: Option[GroupMember[F]] = None,
-    var equivalentExprs: Vector[GroupMember[F]] = Vector.empty
+    val optMember: Ref[F, Option[GroupMember[F]]],
+    val equivalentExprs: Ref[F, Vector[GroupMember[F]]]
 ) {
 
   def appendMember(member: GroupMember[F]): F[Unit] =
-    Sync[F].delay {
-      equivalentExprs = equivalentExprs :+ member
+    equivalentExprs.update {
+      _ :+ member
     }
 
-  def exploreMember(rules: Vector[Rule[F]])(
-      member: GroupMember[F]
-  ): StateT[F, EvaluatorGraph[F], Vector[GroupMember[F]]] =
-    for {
-      newMembers <- member.exploreMember(rules)
-      _ <- StateT.liftF(newMembers.foldM(()) { (_, newMember) =>
-        memo.doEnqueuePlan(newMember.logic).map(_ => ())
-      })
-    } yield newMembers
-
   def exploreGroup(
-      rules: Vector[Rule[F]]
-  ): StateT[F, EvaluatorGraph[F], Unit] = {
-    equivalentExprs
-      .map(exploreMember(rules))
-      .sequence
-      .map(_.flatten)
-      .flatMapF(newMembers => Sync[F].delay { equivalentExprs = newMembers })
+      rules: Vector[Rule[F]],
+      graph: EvaluatorGraph[F]
+  ): F[Unit] = {
+
+    for {
+      exprs <- equivalentExprs.get
+      newMembers <- exprs
+        .map(_.exploreMember(rules, graph))
+        .sequence
+        .map(_.flatten)
+      _ <- newMembers.foldM(()) { 
+        case (_, egm:EvaluatedGroupMember[F]) => Sync[F].unit // we're done with you
+        case (_, ugm:UnEvaluatedGroupMember[F]) =>  // this is for transformation rules
+        Sync[F].delay(println(s"New un-Evaluated Member -> $ugm")) *> memo.doEnqueuePlan(ugm.logic).map(_ => ())
+      }
+      // _ <- Sync[F].delay{
+      //   System.exit(1)
+      // }
+      _ <- equivalentExprs.set(newMembers)
+    } yield ()
   }
 
-  def optGroupMember =
+  def optGroupMember: F[EvaluatedGroupMember[F]] =
     Sync[F]
       .defer {
         equivalentExprs
-          .asInstanceOf[Iterable[GroupMember[F]]]
-          .foldM((Long.MaxValue, Option.empty[GroupMember[F]])) {
-            case ((_, None), groupMember) =>
-              groupMember.cost.map(cost => cost -> Some(groupMember))
-            case ((bestCost, Some(bestGroupMember)), groupMember) =>
-              groupMember.cost.map { cost =>
+        .get.flatMap{_
+            .foldM((Long.MaxValue, Option.empty[EvaluatedGroupMember[F]])) {
+            case (_, gm: UnEvaluatedGroupMember[F]) =>
+              Sync[F].raiseError(
+                new IllegalStateException(
+                  s"Unable to optimize un-evaluated GroupMember ${gm}"
+                )
+              )
+            case ((_, None), gm: EvaluatedGroupMember[F]) =>
+              gm.cost.map(cost => cost -> Some(gm))
+            case (
+                (bestCost, Some(bestGroupMember)),
+                gm: EvaluatedGroupMember[F]
+                ) =>
+              gm.cost.map { cost =>
                 if (cost < bestCost)
-                  cost -> Some(groupMember)
+                  cost -> Some(gm)
                 else
                   bestCost -> Some(bestGroupMember)
               }
           }
+        }
       }
       .map(out => out._2.get)
 }
@@ -61,11 +73,12 @@ class Group[F[_]: Sync](
 object Group {
   def apply[F[_]: Sync](
       memo: Memo[F],
-      logic: LogicNode,
-      id: Int
+      logic: LogicNode
   ): F[Group[F]] =
     for {
-      group <- Sync[F].delay(new Group(memo, logic, id))
-      _ <- group.appendMember(new GroupMember(group, logic))
+      optMember <- Ref.of(Option.empty[GroupMember[F]])
+      members <- Ref.of(Vector.empty[GroupMember[F]])
+      group <- Sync[F].delay(new Group(memo, logic, optMember, members))
+      _ <- group.appendMember(UnEvaluatedGroupMember(logic))
     } yield group
 }

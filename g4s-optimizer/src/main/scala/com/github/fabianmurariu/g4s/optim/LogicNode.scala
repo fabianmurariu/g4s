@@ -1,7 +1,6 @@
 package com.github.fabianmurariu.g4s.optim
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.hashing.MurmurHash3
 
 abstract class LogicNode(
     cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty // FIXME: this could change in the future
@@ -9,16 +8,23 @@ abstract class LogicNode(
   // the left most binding
   def sorted: Option[Name]
   // the binding outputs of the logical operator
-  def output: Set[Name]
+  def output: Seq[Name]
 
-  val signature: Int = this match {
-    case LogicMemoRef(group) => group.logic.signature
-    case _ => MurmurHash3.orderedHash(Array(
-                              this.getClass(),
-                              MurmurHash3.unorderedHash(children.map(_.signature))
-                            ))
+  def deRef: LogicNode = self match {
+    case LogicMemoRef(group) => group.logic
+    case node => node
   }
-   
+
+  val signature: String = this match {
+    case LogicMemoRef(group) => group.logic.signature
+    case node:GetNodes => node.toString()
+    case node:GetEdges => node.toString()
+    case Expand(from, to, transpose) =>
+      s"Expand(${from.signature},${to.signature},$transpose)"
+    case Filter(frontier, filter) =>
+      s"Filter(${frontier.signature},${filter.signature})"
+  }
+
 
 }
 
@@ -33,19 +39,19 @@ case class Return(rets: LogicNode*) extends LogicNode(rets.to(ArrayBuffer)) {
 
   override def sorted: Option[Name] = None
 
-  override def output: Set[Name] =
+  override def output: Seq[Name] =
     rets.map(_.output).reduce(_ ++ _)
 
 }
 
 case class GetNodes(label: Seq[String], sorted: Option[Name] = None)
     extends LogicNode(ArrayBuffer.empty[LogicNode]) {
-  def output: Set[Name] = sorted.toSet
+  def output: Seq[Name] = sorted.toSeq
 }
 
 case class GetEdges(tpe: Seq[String], sorted: Option[Name] = None, transpose:Boolean = false)
     extends LogicNode(ArrayBuffer.empty[LogicNode]) {
-  def output: Set[Name] = Set.empty
+  def output: Seq[Name] = Seq.empty
 }
 
 // (from)<-[:to]-
@@ -56,14 +62,14 @@ case class Expand(from: LogicNode, to: LogicNode, transposed: Boolean)
       Expand(children(0), children(1), transposed)
 
   def sorted: Option[Name] = from.sorted
-  def output: Set[Name] = to.output
+  def output: Seq[Name] = to.output
 }
 
 // terminate expansions by filtering the output nodes
 case class Filter(frontier: LogicNode, filter: LogicNode)
     extends ForkNode(ArrayBuffer(frontier, filter)) {
   def sorted: Option[Name] = frontier.sorted
-  def output: Set[Name] = filter.output
+  def output: Seq[Name] = filter.output
 
   override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
       Filter(children(0), children(1))
@@ -75,7 +81,7 @@ case class JoinPath(
     right: LogicNode,
     on: Option[Name]
 ) extends ForkNode(ArrayBuffer(left, right)) {
-  def output: Set[Name] = Set(left, right).map(_.output).reduce(_ ++ _)
+  def output: Seq[Name] = Seq(left, right).map(_.output).reduce(_ ++ _)
   def sorted: Option[Name] = right.sorted
 
   override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
@@ -93,7 +99,7 @@ case class JoinFork(
 
   override def sorted: Option[Name] = to.sorted
 
-  override def output: Set[Name] = children.flatMap(_.output).toSet
+  override def output: Seq[Name] = children.flatMap(_.output).toSeq
 
 }
 
@@ -101,7 +107,7 @@ case class Diag(node: LogicNode) extends ForkNode(ArrayBuffer(node)) {
 
   override def sorted: Option[Name] = node.output.headOption
 
-  override def output: Set[Name] = node.output
+  override def output: Seq[Name] = node.output
 
   override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
       Diag(children(0))
@@ -112,7 +118,7 @@ case class LogicMemoRef[F[_]](group: Group[F])
 
   override def sorted: Option[Name] = plan.sorted
 
-  override def output: Set[Name] = plan.output
+  override def output: Seq[Name] = plan.output
 
   def plan: LogicNode = children.next()
 }

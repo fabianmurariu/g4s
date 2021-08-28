@@ -2,41 +2,29 @@ package com.github.fabianmurariu.g4s.optim
 
 import com.github.fabianmurariu.g4s.optim.impls.Operator
 import cats.implicits._
-import cats.data.StateT
 import cats.effect.Sync
 
-class GroupMember[F[_]: Sync](
-    val parent: Group[F],
-    val logic: LogicNode,
-    val physic: Option[Operator[F]] = None
-) {
-
-  def memo: Memo[F] = parent.memo
-
-  def physical: F[Operator[F]] = Sync[F].delay(physic.get)
+sealed abstract class GroupMember[F[_]: Sync] { self =>
 
   def exploreMember(
-      rules: Vector[Rule[F]]
-  ): StateT[F, EvaluatorGraph[F], Vector[GroupMember[F]]] = {
+      rules: Vector[Rule[F]],
+      graph: EvaluatorGraph[F]
+  ): F[Vector[GroupMember[F]]] = {
+    Sync[F].delay(println(s"Exploring member $this")) *>
     rules
-      .map(rule => rule.eval(this))
+      .map(rule => rule.eval(this, graph))
       .sequence
       .map(_.flatten)
   }
 
-  def cost: F[Long] = Sync[F].delay(-1L)
+  def logic: LogicNode
 
-  // for (rule <- rules) {
-  //   if (rule.isDefinedAt(this)) {
-  //     val newMembers = rule(this)
-  //     for (newMember <- newMembers) {
-  //       val logic = newMember.logic
-  //       // enqueue in memo
-  //       memo.doEnqueuePlan(logic)
-  //       // add to the groups expression list
-  //       parent.appendMember(newMember)
-  //     }
-  //   }
-  // }
-  // }
+}
+
+case class UnEvaluatedGroupMember[F[_]: Sync](logic: LogicNode)
+    extends GroupMember[F]
+case class EvaluatedGroupMember[F[_]: Sync](logic: LogicNode, plan: Operator[F])
+    extends GroupMember[F] {
+
+  def cost: F[Long] = Sync[F].delay(plan.cardinality)
 }

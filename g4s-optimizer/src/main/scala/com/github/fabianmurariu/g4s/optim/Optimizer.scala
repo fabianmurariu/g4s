@@ -3,7 +3,6 @@ package com.github.fabianmurariu.g4s.optim
 import cats.implicits._
 import cats.effect.Sync
 import alleycats.std.iterable._
-import cats.data.StateT
 
 class Optimizer[F[_]: Sync](rules: Vector[Rule[F]]) {
 
@@ -24,17 +23,16 @@ class Optimizer[F[_]: Sync](rules: Vector[Rule[F]]) {
     } yield m
   }
 
-  def optimize(qg: QueryGraph): StateT[F, EvaluatorGraph[F], Memo[F]] = {
-    val memo: StateT[F, EvaluatorGraph[F], Memo[F]] = StateT.liftF(initMemo(qg))
+  def optimize(qg: QueryGraph, graph: EvaluatorGraph[F]): F[Memo[F]] = {
+    val memo = initMemo(qg)
 
-    def loop(m: Memo[F]): StateT[F, EvaluatorGraph[F], Memo[F]] =
-      StateT.liftF(m.isDone).flatMap {
-        case true => StateT.liftF(Sync[F].unit).map(_ => m)
-        case false =>
-          StateT
-            .liftF(m.pop)
-            .flatMap(_.exploreGroup(rules))
-            .flatMap(_ => loop(m))
+    def loop(m: Memo[F]): F[Memo[F]] =
+      m.pop.flatMap{
+        case None => Sync[F].delay(m)
+        case Some(group) =>
+          group
+            .exploreGroup(rules, graph)
+          .flatMap(_ => loop(m))
       }
 
     memo.flatMap(loop)

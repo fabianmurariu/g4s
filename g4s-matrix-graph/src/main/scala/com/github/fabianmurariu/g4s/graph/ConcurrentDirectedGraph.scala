@@ -29,6 +29,7 @@ import cats.effect.Sync
   * does not do transactions
   */
 class ConcurrentDirectedGraph[F[_], V, E](
+    nodes: BlockingMatrix[F, Boolean],
     edges: BlockingMatrix[F, Boolean],
     edgesTranspose: BlockingMatrix[F, Boolean],
     edgeTypes: LabelledMatrices[F],
@@ -36,7 +37,9 @@ class ConcurrentDirectedGraph[F[_], V, E](
     nodeLabels: LabelledMatrices[F],
     semiRing: GrBSemiring[Boolean, Boolean, Boolean],
     ds: DataStore[F, V, E]
-)(implicit val F:Sync[F], G: GRB) extends EvaluatorGraph[F]{ self =>
+)(implicit val F:Sync[F], G: GRB) extends EvaluatorGraph[F]{
+
+ self =>
 
   sealed trait PlanOutput
   case class Releasable(g: GrBMatrix[F, Boolean]) extends PlanOutput
@@ -48,25 +51,25 @@ class ConcurrentDirectedGraph[F[_], V, E](
   case class Return2(ret1: Array[Long], ret2: Array[Long]) extends IdScan
   case class ReturnN(ret: Seq[ArrayBuffer[Long]]) extends IdScan
 
-  def lookupEdges(
-      tpe: String,
+  override def lookupEdges(
+      tpe: Option[String],
       transpose: Boolean
   ): F[(BlockingMatrix[F, Boolean], Long)] = transpose match {
     case true =>
       for {
-        mat <- edgeTypesTranspose.getOrCreate(tpe)
+        mat <- tpe.map(edgeTypesTranspose.getOrCreate(_)).getOrElse(F.pure(edgesTranspose))
         card <- mat.use(_.nvals)
       } yield (mat, card)
     case false =>
       for {
-        mat <- edgeTypes.getOrCreate(tpe)
+        mat <- tpe.map(edgeTypes.getOrCreate(_)).getOrElse(F.pure(edges))
         card <- mat.use(_.nvals)
       } yield (mat, card)
   }
 
-  def lookupNodes(tpe: String): F[(BlockingMatrix[F, Boolean], Long)] = {
+  override def lookupNodes(tpe: Option[String]): F[(BlockingMatrix[F, Boolean], Long)] = {
     for {
-      mat <- nodeLabels.getOrCreate(tpe)
+      mat <- tpe.map(nodeLabels.getOrCreate(_)).getOrElse(F.pure(nodes))
       card <- mat.use(_.nvals)
     } yield (mat, card)
   }
@@ -214,6 +217,7 @@ class ConcurrentDirectedGraph[F[_], V, E](
       tpe = tt.tpe.toString
       nodeTpeMat <- nodeLabels.getOrCreate(tpe)
       _ <- nodeTpeMat.use(update(id, id))
+      _ <- nodes.use(update(id, id))
     } yield id
   }
 
@@ -265,6 +269,7 @@ object ConcurrentDirectedGraph {
     for {
       size <- Resource.liftF(Ref.of[F, (Long, Long)]((4L * 1024L, 4L * 1024L)))
       edges <- BlockingMatrix[F, Boolean](size)
+      nodes <- BlockingMatrix[F, Boolean](size)
       edgesT <- BlockingMatrix[F, Boolean](size)
       edgeTypes <- LabelledMatrices[F](size)
       edgeTypesTranspose <- LabelledMatrices[F](size)
@@ -276,6 +281,7 @@ object ConcurrentDirectedGraph {
         false
       )
     } yield new ConcurrentDirectedGraph(
+      nodes,
       edges,
       edgesT,
       edgeTypes,
@@ -285,25 +291,4 @@ object ConcurrentDirectedGraph {
       ds
     )
 
-  def evaluatorGraph[F[_]:Concurrent, V:ClassTag, E](implicit G: GRB): Resource[F, EvaluatorGraph[F]] =
-    apply[F, V, E].map { graph => 
-      new EvaluatorGraph[F] {
-
-        override implicit val F: Sync[F] = Sync[F]
-
-        override def lookupNodes(
-            tpe: String
-        ): F[(BlockingMatrix[F, Boolean], Long)] = {
-          graph.lookupNodes(tpe)
-        }
-
-        override def lookupEdges(
-            tpe: String,
-            transpose: Boolean
-        ): F[(BlockingMatrix[F, Boolean], Long)] = {
-          graph.lookupEdges(tpe, transpose)
-        }
-
-      }
-    }
 }

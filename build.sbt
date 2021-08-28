@@ -3,7 +3,7 @@ ThisBuild / scalaVersion := "2.13.4"
 ThisBuild / organization := "com.github.fabianmurariu"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 
-val grbVersion = s"0.1.21-${sys.props("os.name").toLowerCase()}"
+val grbVersion = s"0.1.22-${sys.props("os.name").toLowerCase()}"
 lazy val munitVersion = "0.7.11" 
 
 lazy val commonSettings = Seq(
@@ -61,9 +61,9 @@ lazy val commonSettings = Seq(
     "org.typelevel" %% "alleycats-core" % "2.3.1", 
     "com.github.mpilquist" %% "simulacrum" % "0.19.0",
     "org.scalameta" %% "munit" % munitVersion % Test
-    // "org.scalameta" %% "munit-scalacheck" % munitVersion % Test
   ),
-  Test / parallelExecution := true,
+  Test / parallelExecution := false,
+  Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.AllLibraryJars,
   resolvers += "Local Maven Repository" at "file://" + Path.userHome.absolutePath + "/.m2/repository"
 )
 
@@ -80,7 +80,7 @@ lazy val g4sSparse = (project in file("g4s-sparse"))
     name := "g4s-sparse",
     libraryDependencies ++= Seq(
       "com.github.fabianmurariu" % "graphblas-package" % grbVersion,
-      "com.github.fabianmurariu" % "graphblas-java" % grbVersion % Test classifier "tests"
+      "com.github.fabianmurariu" % "graphblas-java" % grbVersion classifier "tests",
     )
   )
 // lazy val docs = project // new documentation project
@@ -125,4 +125,3 @@ lazy val g4sMatrixGraph = (project in file("g4s-matrix-graph"))
     )
   )
 
-g4sSparse / Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
