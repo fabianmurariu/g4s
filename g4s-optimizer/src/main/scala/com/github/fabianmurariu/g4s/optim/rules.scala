@@ -1,68 +1,67 @@
 package com.github.fabianmurariu.g4s.optim
 
-import cats.implicits._
 import com.github.fabianmurariu.g4s.optim.impls.GetEdgeMatrix
 import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
-import cats.effect.Sync
+import cats.effect.IO
 
-sealed abstract class Rule[F[_]: Sync]
-    extends ((GroupMember[F], EvaluatorGraph[F]) => F[List[GroupMember[F]]]) {
+sealed abstract class Rule
+    extends ((GroupMember, EvaluatorGraph) => IO[List[GroupMember]]) {
   def eval(
-      member: GroupMember[F],
-      graph: EvaluatorGraph[F]
-  ): F[List[GroupMember[F]]] = Sync[F].suspend {
+      member: GroupMember,
+      graph: EvaluatorGraph
+  ): IO[List[GroupMember]] = IO.defer{
     if (isDefinedAt(member)) {
       apply(member, graph)
     } else {
-      List.empty.pure[F]
+      IO(List.empty)
     }
   }
 
-  def isDefinedAt(gm: GroupMember[F]): Boolean
+  def isDefinedAt(gm: GroupMember): Boolean
 }
 
-trait ImplementationRule[F[_]] extends Rule[F]
-trait TransformationRule[F[_]] extends Rule[F]
+trait ImplementationRule extends Rule
+trait TransformationRule extends Rule
 
 import com.github.fabianmurariu.g4s.optim.{impls => op}
 
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
-class Filter2MxM[F[_]: Sync] extends ImplementationRule[F] {
+class Filter2MxM extends ImplementationRule {
 
   override def apply(
-      gm: GroupMember[F],
-      graph: EvaluatorGraph[F]
-  ): F[List[GroupMember[F]]] = Sync[F].delay {
+      gm: GroupMember,
+      graph: EvaluatorGraph
+  ): IO[List[GroupMember]] = IO.delay {
     gm.logic match {
-      case Filter(frontier: LogicMemoRef[F], filter: LogicMemoRef[F]) =>
-        val physical: op.Operator[F] =
-          op.FilterMul[F](
-            op.RefOperator[F](frontier),
-            op.RefOperator[F](filter)
+      case Filter(frontier: LogicMemoRef, filter: LogicMemoRef) =>
+        val physical: op.Operator =
+          op.FilterMul(
+            op.RefOperator(frontier),
+            op.RefOperator(filter)
           )
 
-        val newGM: GroupMember[F] = EvaluatedGroupMember(gm.logic, physical)
+        val newGM: GroupMember = EvaluatedGroupMember(gm.logic, physical)
         List(newGM)
 
     }
   }
 
-  override def isDefinedAt(gm: GroupMember[F]): Boolean =
+  override def isDefinedAt(gm: GroupMember): Boolean =
     gm.logic.isInstanceOf[Filter]
 
 }
 
-class Expand2MxM[F[_]: Sync] extends ImplementationRule[F] {
+class Expand2MxM extends ImplementationRule {
 
   override def apply(
-      gm: GroupMember[F],
-      graph: EvaluatorGraph[F]
-  ): F[List[GroupMember[F]]] = Sync[F].delay {
+      gm: GroupMember,
+      graph: EvaluatorGraph
+  ): IO[List[GroupMember]] = IO.delay {
     gm.logic match {
-      case Expand(from: LogicMemoRef[F], to: LogicMemoRef[F], _) =>
-        val physical: op.Operator[F] =
-          op.ExpandMul[F](op.RefOperator[F](from), op.RefOperator[F](to))
+      case Expand(from: LogicMemoRef, to: LogicMemoRef, _) =>
+        val physical: op.Operator =
+          op.ExpandMul(op.RefOperator(from), op.RefOperator(to))
 
         val newGM = EvaluatedGroupMember(gm.logic, physical)
         List(newGM)
@@ -70,24 +69,24 @@ class Expand2MxM[F[_]: Sync] extends ImplementationRule[F] {
     }
   }
 
-  override def isDefinedAt(gm: GroupMember[F]): Boolean =
+  override def isDefinedAt(gm: GroupMember): Boolean =
     gm.logic.isInstanceOf[Expand]
 
 }
 
-class LoadEdges[F[_]: Sync] extends ImplementationRule[F] {
+class LoadEdges extends ImplementationRule {
 
   def apply(
-      gm: GroupMember[F],
-      graph: EvaluatorGraph[F]
-  ): F[List[GroupMember[F]]] =
-    Sync[F].suspend {
+      gm: GroupMember,
+      graph: EvaluatorGraph
+  ): IO[List[GroupMember]] =
+    IO.defer {
       gm.logic match {
         case GetEdges((tpe: String) :: _, sorted, transpose) =>
           graph.lookupEdges(tpe, transpose).map {
             case (mat, card) =>
-              val physical: op.Operator[F] =
-                GetEdgeMatrix[F](sorted, Some(tpe), mat, card)
+              val physical: op.Operator =
+                GetEdgeMatrix(sorted, Some(tpe), mat, card)
               List(
                 EvaluatedGroupMember(gm.logic, physical)
               )
@@ -95,23 +94,23 @@ class LoadEdges[F[_]: Sync] extends ImplementationRule[F] {
       }
     }
 
-  override def isDefinedAt(gm: GroupMember[F]): Boolean =
+  override def isDefinedAt(gm: GroupMember): Boolean =
     gm.logic.isInstanceOf[GetEdges]
 
 }
 
-class LoadNodes[F[_]: Sync] extends ImplementationRule[F] {
+class LoadNodes extends ImplementationRule {
 
   def apply(
-      gm: GroupMember[F],
-      graph: EvaluatorGraph[F]
-  ): F[List[GroupMember[F]]] = Sync[F].suspend {
+      gm: GroupMember,
+      graph: EvaluatorGraph
+  ): IO[List[GroupMember]] = IO.defer {
     gm.logic match {
       case GetNodes((label :: _), sorted) =>
         graph.lookupNodes(label).map {
           case (mat, card) =>
-            val physical: op.Operator[F] =
-              op.GetNodeMatrix[F](
+            val physical: op.Operator =
+              op.GetNodeMatrix(
                 sorted.getOrElse(new UnNamed),
                 Some(label),
                 mat,
@@ -124,27 +123,26 @@ class LoadNodes[F[_]: Sync] extends ImplementationRule[F] {
     }
   }
 
-  override def isDefinedAt(gm: GroupMember[F]): Boolean =
+  override def isDefinedAt(gm: GroupMember): Boolean =
     gm.logic.isInstanceOf[GetNodes]
 
 }
 
-trait EvaluatorGraph[F[_]] {
-  implicit def F: Sync[F]
+trait EvaluatorGraph {
 
   def lookupEdges(
       tpe: Option[String],
       transpose: Boolean
-  ): F[(BlockingMatrix[F, Boolean], Long)]
+  ): IO[(BlockingMatrix[Boolean], Long)]
 
   def lookupEdges(
       tpe: String,
       transpose: Boolean
-  ): F[(BlockingMatrix[F, Boolean], Long)] =
+  ): IO[(BlockingMatrix[Boolean], Long)] =
     this.lookupEdges(Some(tpe), transpose)
 
-  def lookupNodes(tpe: Option[String]): F[(BlockingMatrix[F, Boolean], Long)]
+  def lookupNodes(tpe: Option[String]): IO[(BlockingMatrix[Boolean], Long)]
 
-  def lookupNodes(tpe: String): F[(BlockingMatrix[F, Boolean], Long)] =
+  def lookupNodes(tpe: String): IO[(BlockingMatrix[Boolean], Long)] =
     this.lookupNodes(Some(tpe))
 }

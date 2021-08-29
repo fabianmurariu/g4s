@@ -5,6 +5,9 @@ ThisBuild / version      := "0.1.0-SNAPSHOT"
 
 val grbVersion = s"0.1.22-${sys.props("os.name").toLowerCase()}"
 lazy val munitVersion = "0.7.11" 
+lazy val fs2Version = "3.1.1"
+lazy val catsEffectVersion = "3.2.3"
+lazy val catsVersion = "2.6.1"
 
 lazy val commonSettings = Seq(
   version := "0.1-SNAPSHOT",
@@ -57,8 +60,8 @@ lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("munit.Framework"),
   coverageEnabled := true,
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-effect" % "2.3.1",
-    "org.typelevel" %% "alleycats-core" % "2.3.1", 
+    "org.typelevel" %% "cats-effect" % catsEffectVersion,
+    "org.typelevel" %% "alleycats-core" % catsVersion, 
     "com.github.mpilquist" %% "simulacrum" % "0.19.0",
     "org.scalameta" %% "munit" % munitVersion % Test
   ),
@@ -108,7 +111,7 @@ lazy val g4sOptim = (project in file("g4s-optimizer"))
         ExclusionRule(organization = "org.scalacheck", name= "scalacheck_2.12")
         ),
       "com.lihaoyi" %% "pprint" % "0.6.6",
-      "co.fs2" %% "fs2-core" % "2.4.4" // FIXME: break BlockingMatrix into some support package
+      "co.fs2" %% "fs2-core" % fs2Version // FIXME: break BlockingMatrix into some support package
     )
   )
 
@@ -120,7 +123,7 @@ lazy val g4sMatrixGraph = (project in file("g4s-matrix-graph"))
     name := "g4s-matrix-graph",
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.1",
-      "co.fs2" %% "fs2-core" % "2.4.4",
+      "co.fs2" %% "fs2-core" % fs2Version,
     )
   )
 

@@ -22,7 +22,7 @@ class GrBTuplesSpec extends IOSupport {
         Array(1, 2, 1, 0, 2),
         Array(true, true, true, true, true)
       )
-      _ <- Resource.liftF {
+      _ <- Resource.eval {
         for {
           tplsA <- a.extract.map { case (is, js, _) => new GrBTuples(is, js) }
           tplsb <- b.extract.map { case (is, js, _) => new GrBTuples(is, js) }
@@ -69,7 +69,7 @@ class GrBTuplesSpec extends IOSupport {
         Array(0, 2, 1, 2),
         Array(true, true, true, true)
       )
-      _ <- Resource.liftF {
+      _ <- Resource.eval {
         for {
           tplsA <- a.extract.map { case (is, js, _) => new GrBTuples(is, js) }
           tplsB <- b.extract.map { case (is, js, _) => new GrBTuples(is, js) }

@@ -13,7 +13,7 @@ trait SparseVectorHandler[
 
   def get(vec: Buffer)(i: Long): Array[T]
 
-  def set(vec: Buffer)(i: Long, v: T): Unit
+  def set(vec: Buffer)(i: Long, v: T): Long
 
   def setAll(vec: Buffer)(is: Array[Long], ts: Array[T]): Unit = {
     assert(is.length == ts.length)
@@ -26,7 +26,7 @@ trait SparseVectorHandler[
 
   def extract(vec: Buffer): (Array[Long], Array[T])
 
-  def remove(vec: Buffer)(i: Long): Unit =
+  def remove(vec: Buffer)(i: Long): Long =
     GRBCORE.removeElementVector(vec, i)
 
 }
@@ -53,7 +53,7 @@ object SparseVectorHandler {
           vec,
           is,
           vs,
-          is.length,
+          is.length.toLong,
           GRAPHBLAS.firstBinaryOpBoolean()
         )
         vec
@@ -65,7 +65,7 @@ object SparseVectorHandler {
       def get(vec: Buffer)(i: Long): Array[Boolean] =
         GRAPHBLAS.getVectorElementBoolean(vec, i)
 
-      def set(vec: Buffer)(i: Long, t: Boolean): Unit =
+      def set(vec: Buffer)(i: Long, t: Boolean): Long =
         GRAPHBLAS.setVectorElementBoolean(vec, i, t)
     }
 
@@ -87,7 +87,7 @@ object SparseVectorHandler {
           vec,
           is,
           vs,
-          is.length,
+          is.length.toLong,
           GRAPHBLAS.firstBinaryOpByte()
         )
         vec
@@ -99,7 +99,7 @@ object SparseVectorHandler {
       def get(vec: Buffer)(i: Long): Array[Byte] =
         GRAPHBLAS.getVectorElementByte(vec, i)
 
-      def set(vec: Buffer)(i: Long, t: Byte): Unit =
+      def set(vec: Buffer)(i: Long, t: Byte): Long =
         GRAPHBLAS.setVectorElementByte(vec, i, t)
     }
 
@@ -120,7 +120,7 @@ object SparseVectorHandler {
           vec,
           is,
           vs,
-          is.length,
+          is.length.toLong,
           GRAPHBLAS.firstBinaryOpShort()
         )
         vec
@@ -131,7 +131,7 @@ object SparseVectorHandler {
       def get(vec: Buffer)(i: Long): Array[Short] =
         GRAPHBLAS.getVectorElementShort(vec, i)
 
-      def set(vec: Buffer)(i: Long, t: Short): Unit =
+      def set(vec: Buffer)(i: Long, t: Short): Long =
         GRAPHBLAS.setVectorElementShort(vec, i, t)
     }
 
@@ -152,7 +152,7 @@ object SparseVectorHandler {
           vec,
           is,
           vs,
-          is.length,
+          is.length.toLong,
           GRAPHBLAS.firstBinaryOpInt()
         )
         vec
@@ -163,7 +163,7 @@ object SparseVectorHandler {
       def get(vec: Buffer)(i: Long): Array[Int] =
         GRAPHBLAS.getVectorElementInt(vec, i)
 
-      def set(vec: Buffer)(i: Long, t: Int): Unit =
+      def set(vec: Buffer)(i: Long, t: Int): Long =
         GRAPHBLAS.setVectorElementInt(vec, i, t)
     }
 
@@ -185,7 +185,7 @@ object SparseVectorHandler {
           vec,
           is,
           vs,
-          is.length,
+          is.length.toLong,
           GRAPHBLAS.firstBinaryOpLong()
         )
         vec
@@ -197,7 +197,7 @@ object SparseVectorHandler {
       def get(vec: Buffer)(i: Long): Array[Long] =
         GRAPHBLAS.getVectorElementLong(vec, i)
 
-      def set(vec: Buffer)(i: Long, t: Long): Unit =
+      def set(vec: Buffer)(i: Long, t: Long): Long =
         GRAPHBLAS.setVectorElementLong(vec, i, t)
     }
 
@@ -219,7 +219,7 @@ object SparseVectorHandler {
           vec,
           is,
           vs,
-          is.length,
+          is.length.toLong,
           GRAPHBLAS.firstBinaryOpFloat()
         )
         vec
@@ -231,7 +231,7 @@ object SparseVectorHandler {
       def get(vec: Buffer)(i: Long): Array[Float] =
         GRAPHBLAS.getVectorElementFloat(vec, i)
 
-      def set(vec: Buffer)(i: Long, t: Float): Unit =
+      def set(vec: Buffer)(i: Long, t: Float): Long =
         GRAPHBLAS.setVectorElementFloat(vec, i, t)
     }
 
@@ -253,7 +253,7 @@ object SparseVectorHandler {
           vec,
           is,
           vs,
-          is.length,
+          is.length.toLong,
           GRAPHBLAS.firstBinaryOpDouble()
         )
         vec
@@ -265,7 +265,7 @@ object SparseVectorHandler {
       def get(vec: Buffer)(i: Long): Array[Double] =
         GRAPHBLAS.getVectorElementDouble(vec, i)
 
-      def set(vec: Buffer)(i: Long, t: Double): Unit =
+      def set(vec: Buffer)(i: Long, t: Double): Long =
         GRAPHBLAS.setVectorElementDouble(vec, i, t)
     }
 }

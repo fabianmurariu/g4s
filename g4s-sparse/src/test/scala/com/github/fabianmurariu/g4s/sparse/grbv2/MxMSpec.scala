@@ -5,7 +5,6 @@ import org.scalacheck.Arbitrary
 import cats.implicits._
 import scala.reflect.ClassTag
 import com.github.fabianmurariu.g4s.sparse.grb.{SparseMatrixHandler}
-import scala.concurrent.ExecutionContext
 import cats.effect.IO
 import munit.ScalaCheckSuite
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
@@ -15,10 +14,9 @@ import com.github.fabianmurariu.g4s.sparse.grb.MonoidBuilder
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
-import scala.concurrent.ExecutionContextExecutor
 
 class MxMSpec extends ScalaCheckSuite {
-  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
+  implicit val runtime =  cats.effect.unsafe.IORuntime.global
 
   def associative[A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: MonoidBuilder: Reduce: EqOp](
       implicit OP: BuiltInBinaryOps[A],

@@ -12,10 +12,9 @@ import com.github.fabianmurariu.g4s.sparse.grb.SparseMatrixHandler
 import munit.ScalaCheckSuite
 import org.scalacheck.Arbitrary
 import org.scalacheck.Prop._
-import scala.concurrent.ExecutionContextExecutor
 
 class CreateMatrixSpec extends ScalaCheckSuite {
-  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
+  implicit val runtime =  cats.effect.unsafe.IORuntime.global
 
   def tuples[A: ClassTag](m: MatrixTuples[A]): (Array[Long], Array[Long], Array[A]) = {
 

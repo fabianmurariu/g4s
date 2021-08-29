@@ -9,8 +9,11 @@ import cats.effect.Resource
 import com.github.fabianmurariu.g4s.sparse.grb.EqOp
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
+import cats.effect.unsafe.IORuntime
 
 class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
+
+  implicit val runtime: IORuntime =  cats.effect.unsafe.IORuntime.global
 
   extract[Boolean]
   extract[Byte]
@@ -32,11 +35,11 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
           val io: IO[Unit] = (for {
             a <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
             b <- GrBMatrix[IO, T](r2, c2)
-            _ <- Resource.liftF(
+            _ <- Resource.eval(
               b.update(a(0L until r2, 0L until c2))
             ) // b = A(0:r2, 0:c2)
-            _ <- Resource.liftF(a.resize(r2, c2))
-            check <- Resource.liftF(b.isEq(a))
+            _ <- Resource.eval(a.resize(r2, c2))
+            check <- Resource.eval(b.isEq(a))
           } yield check).use(c =>
             IO {
               assertEquals(c, true)
@@ -59,11 +62,11 @@ class AssignSpec extends munit.ScalaCheckSuite with SuiteUtils {
           val io: IO[Unit] = (for {
             b <- GrBMatrix.fromTuples[IO, T](mt.rows, mt.cols)(is, js, vs)
             a <- GrBMatrix[IO, T](r2, c2)
-            _ <- Resource.liftF(
+            _ <- Resource.eval(
               a(0 until mt.rows.toInt, 0 until mt.cols.toInt).set(b)
             ) // b(0:r, 0:c)= A
-            _ <- Resource.liftF(a.resize(mt.rows, mt.cols))
-            check <- Resource.liftF(b.isEq(a))
+            _ <- Resource.eval(a.resize(mt.rows, mt.cols))
+            check <- Resource.eval(b.isEq(a))
           } yield check).use(c =>
             IO {
               assertEquals(c, true)

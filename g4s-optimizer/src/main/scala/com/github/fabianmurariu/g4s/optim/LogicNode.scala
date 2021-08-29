@@ -12,19 +12,18 @@ abstract class LogicNode(
 
   def deRef: LogicNode = self match {
     case LogicMemoRef(group) => group.logic
-    case node => node
+    case node                => node
   }
 
   def signature: String = this match {
     case LogicMemoRef(group) => group.logic.signature
-    case node:GetNodes => node.toString()
-    case node:GetEdges => node.toString()
+    case node: GetNodes      => node.toString()
+    case node: GetEdges      => node.toString()
     case Expand(from, to, transpose) =>
       s"Expand(${from.signature},${to.signature},$transpose)"
     case Filter(frontier, filter) =>
       s"Filter(${frontier.signature},${filter.signature})"
   }
-
 
 }
 
@@ -32,7 +31,7 @@ sealed abstract class ForkNode(
     cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty
 ) extends LogicNode(cs) {
 
-  def rewire[F[_]](children:Vector[LogicMemoRef[F]]): LogicNode
+  def rewire(children: Vector[LogicMemoRef]): LogicNode
 }
 
 case class Return(rets: LogicNode*) extends LogicNode(rets.to(ArrayBuffer)) {
@@ -49,8 +48,11 @@ case class GetNodes(label: Seq[String], sorted: Option[Name] = None)
   def output: Seq[Name] = sorted.toSeq
 }
 
-case class GetEdges(tpe: Seq[String], sorted: Option[Name] = None, transpose:Boolean = false)
-    extends LogicNode(ArrayBuffer.empty[LogicNode]) {
+case class GetEdges(
+    tpe: Seq[String],
+    sorted: Option[Name] = None,
+    transpose: Boolean = false
+) extends LogicNode(ArrayBuffer.empty[LogicNode]) {
   def output: Seq[Name] = Seq.empty
 }
 
@@ -58,8 +60,8 @@ case class GetEdges(tpe: Seq[String], sorted: Option[Name] = None, transpose:Boo
 case class Expand(from: LogicNode, to: LogicNode, transposed: Boolean)
     extends ForkNode(ArrayBuffer(from, to)) {
 
-  override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
-      Expand(children(0), children(1), transposed)
+  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
+    Expand(children(0), children(1), transposed)
 
   def sorted: Option[Name] = from.sorted
   def output: Seq[Name] = to.output
@@ -71,8 +73,8 @@ case class Filter(frontier: LogicNode, filter: LogicNode)
   def sorted: Option[Name] = frontier.sorted
   def output: Seq[Name] = filter.output
 
-  override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
-      Filter(children(0), children(1))
+  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
+    Filter(children(0), children(1))
 }
 
 // join multiple logic nodes
@@ -84,8 +86,8 @@ case class JoinPath(
   def output: Seq[Name] = Seq(left, right).map(_.output).reduce(_ ++ _)
   def sorted: Option[Name] = right.sorted
 
-  override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
-      JoinPath(children(0), children(1), on)
+  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
+    JoinPath(children(0), children(1), on)
 }
 
 // join into a top node
@@ -94,8 +96,8 @@ case class JoinFork(
     cs: Seq[LogicNode] // children
 ) extends ForkNode(to +: cs.to(ArrayBuffer)) {
 
-  override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
-      JoinFork(children(0), children.tail)
+  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
+    JoinFork(children(0), children.tail)
 
   override def sorted: Option[Name] = to.sorted
 
@@ -109,11 +111,11 @@ case class Diag(node: LogicNode) extends ForkNode(ArrayBuffer(node)) {
 
   override def output: Seq[Name] = node.output
 
-  override def rewire[F[_]](children: Vector[LogicMemoRef[F]]): LogicNode = 
-      Diag(children(0))
+  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
+    Diag(children(0))
 }
 
-case class LogicMemoRef[F[_]](group: Group[F])
+case class LogicMemoRef(group: Group)
     extends LogicNode(ArrayBuffer(group.logic)) {
 
   override def sorted: Option[Name] = plan.sorted

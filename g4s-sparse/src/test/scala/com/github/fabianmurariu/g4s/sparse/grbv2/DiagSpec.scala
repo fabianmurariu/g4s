@@ -17,7 +17,7 @@ import com.github.fabianmurariu.g4s.sparse.grb.Reduce
 
 class DiagSpec extends ScalaCheckSuite with SuiteUtils {
 
-  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
+  implicit val runtime =  cats.effect.unsafe.IORuntime.global
 
   override def scalaCheckTestParameters: scalacheck.Test.Parameters =
     super.scalaCheckTestParameters

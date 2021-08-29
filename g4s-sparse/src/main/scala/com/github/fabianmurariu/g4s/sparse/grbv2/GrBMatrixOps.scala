@@ -65,7 +65,7 @@ object GrBMatrixOps {
       pointer: F[MatrixPointer]
   )(implicit G: GRB): Resource[F, MatrixPointer] =
     for {
-      p <- Resource.liftF(pointer)
+      p <- Resource.eval(pointer)
       pDup <- Resource.fromAutoCloseable(
         Sync[F].delay(new MatrixPointer(GRBCORE.dupMatrix(p.ref)))
       )
@@ -83,7 +83,7 @@ object GrBMatrixOps {
     } yield vals match {
       case (is, js, vs) =>
         val extraItems = if (limit >= n) "" else " .. "
-        (Stream(is: _*), Stream(js: _*), Stream(vs: _*)).zipped
+        is.lazyZip(js).lazyZip(vs)
           .take(limit)
           .map { case (i, j, v) => s"($i,$j):$v" }
           .mkString(
@@ -135,9 +135,9 @@ object GrBMatrixOps {
       desc: Option[GrBDescriptor]
   )(implicit G:GRB): Resource[F, GrBVector[F, A]] = {
     (for {
-      r <- Resource.liftF(nrows(pointer))
+      r <- Resource.eval(nrows(pointer))
       v <- GrBVector[F, A](r)
-    } yield v).evalMap[F, GrBVector[F, A]] { vec =>
+    } yield v).evalMap{ vec =>
       for {
         v <- vec.pointer
         m <- pointer

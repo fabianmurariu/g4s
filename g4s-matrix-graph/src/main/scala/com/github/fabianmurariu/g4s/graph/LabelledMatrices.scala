@@ -1,49 +1,49 @@
 package com.github.fabianmurariu.g4s.graph
 
-import cats.implicits._
 import java.util.concurrent.ConcurrentHashMap
-import cats.effect.concurrent.Ref
 import cats.effect.Concurrent
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 
 import scala.collection.JavaConverters._
-import cats.effect.concurrent.Semaphore
 import cats.effect.Resource
 import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
+import cats.implicits._
+import cats.effect.kernel.Ref
+import cats.effect.IO
+import cats.effect.std.Semaphore
 
-class LabelledMatrices[F[_]](
+class LabelledMatrices(
     private[graph] val mats: ConcurrentHashMap[
       String,
-      BlockingMatrix[F, Boolean]
+      BlockingMatrix[Boolean]
     ],
-    shape: Ref[F, (Long, Long)]
-)(implicit F: Concurrent[F], G: GRB) {
+    shape: Ref[IO, (Long, Long)]
+)(implicit G: GRB) {
 
   private def defaultProvider
-      : F[java.util.function.Function[String, BlockingMatrix[F, Boolean]]] =
+      : IO[java.util.function.Function[String, BlockingMatrix[Boolean]]] =
     for {
-      lock <- Semaphore[F](1)
+      lock <- Semaphore[IO](1)
       s <- shape.get
       (rows, cols) = s
-      f <- GrBMatrix.unsafeFn[F, Boolean](rows, cols)
+      f <- GrBMatrix.unsafeFn[IO, Boolean](rows, cols)
     } yield {s:String => new BlockingMatrix(lock, f(s))}
 
-  def getOrCreate(label: String): F[BlockingMatrix[F, Boolean]] =
+  def getOrCreate(label: String): IO[BlockingMatrix[Boolean]] =
     for {
       matMaker <- defaultProvider
-      mat <- F.delay(mats.computeIfAbsent(label, matMaker))
+      mat <- IO.delay(mats.computeIfAbsent(label, matMaker))
     } yield mat
 
 }
 
 object LabelledMatrices {
-  def apply[F[_]](shape: Ref[F, (Long, Long)])(
+  def apply(shape: Ref[IO, (Long, Long)])(
       implicit G: GRB,
-      F: Concurrent[F]
-  ): Resource[F, LabelledMatrices[F]] =
+  ): Resource[IO, LabelledMatrices] =
     Resource.make(
-      F.pure(new LabelledMatrices[F](new ConcurrentHashMap(), shape))
+      IO.delay(new LabelledMatrices(new ConcurrentHashMap(), shape))
     ) {
       _.mats
         .values()

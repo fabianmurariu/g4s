@@ -1,12 +1,12 @@
 package com.github.fabianmurariu.g4s.optim
 
 import cats.implicits._
-import cats.effect.Sync
 import alleycats.std.iterable._
+import cats.effect.IO
 
-class Optimizer[F[_]: Sync](rules: Vector[Rule[F]]) {
+class Optimizer(rules: Vector[Rule]) {
 
-  private def initMemo(qg: QueryGraph): F[Memo[F]] = {
+  private def initMemo(qg: QueryGraph): IO[Memo] = {
 
     val rootPlans: Map[Binding, LogicNode] = qg.returns
       .map(name => LogicNode.fromQueryGraph(qg)(name).map((name, _)))
@@ -23,12 +23,12 @@ class Optimizer[F[_]: Sync](rules: Vector[Rule[F]]) {
     } yield m
   }
 
-  def optimize(qg: QueryGraph, graph: EvaluatorGraph[F]): F[Memo[F]] = {
+  def optimize(qg: QueryGraph, graph: EvaluatorGraph): IO[Memo] = {
     val memo = initMemo(qg)
 
-    def loop(m: Memo[F]): F[Memo[F]] =
+    def loop(m: Memo): IO[Memo] =
       m.pop.flatMap{
-        case None => Sync[F].delay(m)
+        case None => IO.delay(m)
         case Some(group) =>
           group
             .exploreGroup(rules, graph)
@@ -40,10 +40,10 @@ class Optimizer[F[_]: Sync](rules: Vector[Rule[F]]) {
 
 }
 object Optimizer {
-  def apply[F[_]:Sync] = new Optimizer[F](Vector(
-    new LoadEdges[F],
-    new LoadNodes[F],
-    new Filter2MxM[F],
-    new Expand2MxM[F]
+  def default: Optimizer = new Optimizer(Vector(
+    new LoadEdges,
+    new LoadNodes,
+    new Filter2MxM,
+    new Expand2MxM
   ))
 }

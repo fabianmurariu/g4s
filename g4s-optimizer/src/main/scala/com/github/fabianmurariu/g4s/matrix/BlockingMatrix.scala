@@ -1,35 +1,34 @@
 package com.github.fabianmurariu.g4s.matrix
 
-import cats.implicits._
-import cats.effect.{Concurrent, Resource}
-import cats.effect.concurrent.Semaphore
+import cats.effect.Resource
 import com.github.fabianmurariu.g4s.sparse.grb.{GRB, SparseMatrixHandler}
 import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import fs2.Stream
-import cats.effect.concurrent.Ref
 import scala.reflect.ClassTag
 import com.github.fabianmurariu.g4s.sparse.grb.Reduce
+import cats.effect.std.Semaphore
+import cats.effect.IO
+import cats.effect.kernel.MonadCancel
+import cats.effect.kernel.Ref
 
-class BlockingMatrix[F[_], A: ClassTag: Reduce](
-    lock: Semaphore[F],
-    mat: GrBMatrix[F, A],
+class BlockingMatrix[A: ClassTag: Reduce](
+    lock: Semaphore[IO],
+    mat: GrBMatrix[IO, A],
     var shutdown: Boolean = false
-)(
-    implicit F: Concurrent[F]
 ) {
   self =>
-  def use[B](f: GrBMatrix[F, A] => F[B]): F[B] =
-    F.bracket(lock.acquire) { _ =>
+  def use[B](f: GrBMatrix[IO, A] => IO[B]): IO[B] =
+    MonadCancel[IO].bracket(lock.acquire) { _ =>
       if (shutdown) {
-        F.raiseError[B](new IllegalStateException("Attempting to modify"))
+        IO.raiseError[B](new IllegalStateException("Attempting to modify"))
       } else {
         f(mat)
       }
     }(_ => lock.release)
 
-  def release: F[Unit] =
-    F.bracket(lock.acquire)(_ => F.delay(self.shutdown = true))(_ =>
-      lock.release
+  def release: IO[Unit] =
+    MonadCancel[IO].bracket(lock.acquire)(_ => IO.delay(self.shutdown = true))(
+      _ => lock.release
     )
 
   /**
@@ -40,12 +39,12 @@ class BlockingMatrix[F[_], A: ClassTag: Reduce](
   def toStream(off: Long = 0, size: Long = 1024)(
       implicit SMH: SparseMatrixHandler[A],
       g: GRB
-  ): Stream[F, (Array[Long], Array[Long], Array[A])] = {
+  ): Stream[IO, (Array[Long], Array[Long], Array[A])] = {
 
     def step(
         offset: Long,
         pageSize: Long
-    ): Stream[F, (Long, Long, Array[Long], Array[Long], Array[A])] =
+    ): Stream[IO, (Long, Long, Array[Long], Array[Long], Array[A])] =
       Stream
         .eval(use { mat =>
           val from = for {
@@ -69,23 +68,24 @@ class BlockingMatrix[F[_], A: ClassTag: Reduce](
               // selection
               //   .show()
               //   .map(sel => println(s"Step: remaining: $remaining, newOffset: $newOffset, selection: [$sel] into: (${rows}x${cols})")) *>
-              F.bracket(GrBMatrix.unsafe[F, A](rows, cols)) { mat =>
-                mat
-                  .update(selection)
-                  .flatMap(_.extract)
-                  .map {
-                    case (is, js, vs) =>
-                      val adjustedOffset = newOffset - rows
-                      val adjustedIs = is.map(_ + adjustedOffset)
-                      (remaining, newOffset, adjustedIs, js, vs)
-                  }
+              MonadCancel[IO].bracket(GrBMatrix.unsafe[IO, A](rows, cols)) {
+                mat =>
+                  mat
+                    .update(selection)
+                    .flatMap(_.extract)
+                    .map {
+                      case (is, js, vs) =>
+                        val adjustedOffset = newOffset - rows
+                        val adjustedIs = is.map(_ + adjustedOffset)
+                        (remaining, newOffset, adjustedIs, js, vs)
+                    }
               }(_.release)
           }
         })
         .flatMap {
-          case ck @ (0, _, _, _, _) => Stream.eval(F.pure(ck))
+          case ck @ (0, _, _, _, _) => Stream.eval(IO.pure(ck))
           case ck @ (_, newOffset, _, _, _) =>
-            Stream.eval(F.pure(ck)) ++ step(newOffset, size)
+            Stream.eval(IO.pure(ck)) ++ step(newOffset, size)
         }
 
     step(off, size).map {
@@ -95,20 +95,20 @@ class BlockingMatrix[F[_], A: ClassTag: Reduce](
 }
 
 object BlockingMatrix {
-  def apply[F[_]: Concurrent, A: SparseMatrixHandler: ClassTag: Reduce](
-      shape: Ref[F, (Long, Long)]
+  def apply[A: SparseMatrixHandler: ClassTag: Reduce](
+      shape: Ref[IO, (Long, Long)]
   )(
       implicit G: GRB
-  ): Resource[F, BlockingMatrix[F, A]] =
+  ): Resource[IO, BlockingMatrix[A]] =
     for {
-      matSize <- Resource.liftF(shape.get)
+      matSize <- Resource.eval(shape.get)
       (rows, cols) = matSize
-      m <- GrBMatrix[F, A](rows, cols)
-      bm <- Resource.liftF(fromGrBMatrix(m))
+      m <- GrBMatrix[IO, A](rows, cols)
+      bm <- Resource.eval(fromGrBMatrix(m))
     } yield bm
 
-  def fromGrBMatrix[F[_]: Concurrent, A: ClassTag: Reduce](
-      mat: GrBMatrix[F, A]
-  ): F[BlockingMatrix[F, A]] =
-    Semaphore[F](1).map(lock => new BlockingMatrix(lock, mat))
+  def fromGrBMatrix[A: ClassTag: Reduce](
+      mat: GrBMatrix[IO, A]
+  ): IO[BlockingMatrix[A]] =
+    Semaphore[IO](1).map(lock => new BlockingMatrix(lock, mat))
 }

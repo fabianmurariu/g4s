@@ -5,10 +5,11 @@ import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps.boolean._
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps.float
 import cats.Monad
-import cats.effect.concurrent.Ref
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
+import cats.effect.kernel.Ref
 
 class DocSpec extends munit.FunSuite {
+  implicit val runtime =  cats.effect.unsafe.IORuntime.global
 
   // graph
   val (is, js, vs) = (
@@ -70,9 +71,9 @@ class DocSpec extends munit.FunSuite {
           _ <- d0.set(start, start, 0.0f)
           // set diag to 0.0
           _ <- Monad[IO].iterateUntilM(0L){i => graph.set(i, i, 0.0f).map(_ => i+1)}(_ >= 7)
-          i <- Ref.of[IO, Int](0)
-          dtmp <- Ref.of[IO, GrBMatrix[IO, Float]](d0)
-          d <- Ref.of[IO, GrBMatrix[IO, Float]](d1)
+          i <- Ref[IO].of(0)
+          dtmp <- Ref[IO].of(d0)
+          d <- Ref[IO].of(d1)
           _ <- Monad[IO].untilM_{
             for {
               d0x <- dtmp.get

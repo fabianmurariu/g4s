@@ -11,6 +11,8 @@ import com.github.fabianmurariu.g4s.optim.impls.OutputRecord
 
 class OptimSpec extends munit.FunSuite {
 
+  implicit val runtime =  cats.effect.unsafe.IORuntime.global
+
   test(
     "Optimize a one hop graph match (a:`fix.A`)-[:`fix.X`]->(c:`fix.C`) return a"
   ) {
@@ -19,20 +21,19 @@ class OptimSpec extends munit.FunSuite {
 
     val Right(queryGraph) = QueryGraph.fromCypherText(query)
 
-    implicit val ec = IO.contextShift(ExecutionContext.Implicits.global)
     val physicalPlan = for {
-      graph <- ConcurrentDirectedGraph[IO, fix.Vertex, fix.Relation]
-      _ <- Resource.liftF(
+      graph <- ConcurrentDirectedGraph[fix.Vertex, fix.Relation]
+      _ <- Resource.eval(
         for {
           src <- graph.insertVertex(new A)
           dst <- graph.insertVertex(new C)
           _ <- graph.insertEdge(src, dst, new X)
         } yield ()
       )
-      memo <- Resource.liftF(Optimizer[IO].optimize(queryGraph, graph))
-      op <- Resource.liftF(memo.physical(Binding("a")))
-      _ <- Resource.liftF(IO.delay(println(op.show())))
-      _ <- Resource.liftF {
+      memo <- Resource.eval(Optimizer.default.optimize(queryGraph, graph))
+      op <- Resource.eval(memo.physical(Binding("a")))
+      _ <- Resource.eval(IO.delay(println(op.show())))
+      _ <- Resource.eval {
         Render(op).eval {
           case OutputRecord(buf) =>
             IO.delay(buf.foreach(println))

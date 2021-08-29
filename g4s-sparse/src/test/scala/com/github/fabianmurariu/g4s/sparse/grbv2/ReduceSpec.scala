@@ -9,7 +9,6 @@ import com.github.fabianmurariu.g4s.sparse.grb.{
   Reduce,
   EqOp
 }
-import scala.concurrent.ExecutionContext
 import munit.ScalaCheckSuite
 import com.github.fabianmurariu.g4s.sparse.grb.GrBMonoid
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
@@ -19,17 +18,15 @@ import com.github.fabianmurariu.g4s.sparse.grb.SparseVectorHandler
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 import cats.effect.IO
 import org.scalacheck
-import scala.concurrent.ExecutionContextExecutor
 
-class ReduceSpec extends ScalaCheckSuite with SuiteUtils{
+class ReduceSpec extends ScalaCheckSuite with SuiteUtils {
 
-  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
+  implicit val runtime = cats.effect.unsafe.IORuntime.global
 
   override def scalaCheckTestParameters: scalacheck.Test.Parameters =
     super.scalaCheckTestParameters
       .withMinSuccessfulTests(50)
       .withMaxDiscardRatio(10)
-
 
   def reduceSpec[
       A: Arbitrary: ClassTag: SparseMatrixHandler: Ordering: Reduce: EqOp: MonoidBuilder: SparseVectorHandler

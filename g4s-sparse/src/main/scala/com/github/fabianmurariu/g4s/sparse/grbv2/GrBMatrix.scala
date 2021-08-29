@@ -56,8 +56,8 @@ sealed class GrBMatrix[F[_]: Sync, A: Reduce: SMH: ClassTag](
   )(implicit VH: SVH[A]): Resource[F, GrBVector[F, A]] =
     for {
       d <- Descriptor[F]
-      _ <- Resource.liftF(d.set[Input0, Transpose])
-      descP <- Resource.liftF(d.pointer.map(Some(_)))
+      _ <- Resource.eval(d.set[Input0, Transpose])
+      descP <- Resource.eval(d.pointer.map(Some(_)))
       v <- GrBMatrixOps.reduce0(pointer, op, descP)
     } yield v
 
@@ -66,11 +66,11 @@ sealed class GrBMatrix[F[_]: Sync, A: Reduce: SMH: ClassTag](
 
   override def reduceColumns(init: A, monoid: GrBMonoid[A]): F[A] =
     (for {
-      p <- Resource.liftF(pointer)
+      p <- Resource.eval(pointer)
       d <- Descriptor[F]
-      _ <- Resource.liftF(d.set[Input0, Transpose])
-      descP <- Resource.liftF(d.pointer.map(Some(_)))
-      a <- Resource.liftF(
+      _ <- Resource.eval(d.set[Input0, Transpose])
+      descP <- Resource.eval(d.pointer.map(Some(_)))
+      a <- Resource.eval(
         Sync[F].delay(Reduce[A].reduceAll(p.ref)(init, monoid, None, descP))
       )
     } yield a).use(Sync[F].pure(_))
@@ -93,9 +93,9 @@ sealed class GrBMatrix[F[_]: Sync, A: Reduce: SMH: ClassTag](
       desc: Option[GrBDescriptor]
   ): Resource[F, GrBMatrix[F, A]] = {
     for {
-      s <- Resource.liftF(shape)
+      s <- Resource.eval(shape)
       out <- GrBMatrix[F, A](s._2, s._1)
-      _ <- Resource.liftF(MatrixOps
+      _ <- Resource.eval(MatrixOps
             .transpose[F, A, A, A, X](out.pointer)(pointer)(mask, accum, desc))
     } yield out
   }

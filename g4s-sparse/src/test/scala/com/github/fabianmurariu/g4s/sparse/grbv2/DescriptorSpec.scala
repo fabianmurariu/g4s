@@ -4,6 +4,7 @@ import cats.effect.IO
 import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
 class DescriptorSpec extends munit.FunSuite {
+  implicit val runtime =  cats.effect.unsafe.IORuntime.global
 
   test("set field + values that work for Default ") {
     val io = Descriptor[IO].use { desc =>

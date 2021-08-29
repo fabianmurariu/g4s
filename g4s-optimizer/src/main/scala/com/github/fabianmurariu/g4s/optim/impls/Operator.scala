@@ -3,24 +3,23 @@ package com.github.fabianmurariu.g4s.optim.impls
 import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import com.github.fabianmurariu.g4s.sparse.grbv2.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
-import cats.effect.Sync
-import cats.implicits._
 import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import com.github.fabianmurariu.g4s.optim.Name
 import com.github.fabianmurariu.g4s.optim.LogicMemoRef
-import cats.Monad
 import cats.effect.IO
 import com.github.fabianmurariu.g4s.optim.Binding
 import com.github.fabianmurariu.g4s.optim.UnNamed
+import cats.effect.kernel.MonadCancel
+import cats.effect.unsafe.IORuntime
 
 /**
   * base class for push operators
   * inspired by "How to Architect a Query Compiler, Revised" Ruby T Tahboub, et al.
   */
-trait Operator[F[_]] { self =>
+trait Operator { self =>
 
-  def eval(cb: Record => F[Unit]): F[Unit]
+  def eval(cb: Record => IO[Unit]): IO[Unit]
 
   /**
     * The binding on which the operator output is sorted
@@ -64,10 +63,10 @@ trait Operator[F[_]] { self =>
   }
 
   def show(offset: String = ""): String = self match {
-    case _: GetNodeMatrix[F] =>
+    case _: GetNodeMatrix =>
       val textBlocks = showInner.mkString(", ")
       s"Nodes[$textBlocks]"
-    case _: GetEdgeMatrix[F] =>
+    case _: GetEdgeMatrix =>
       val textBlocks = showInner.mkString(", ")
       s"Edges[$textBlocks]"
     case ExpandMul(left, right) =>
@@ -91,46 +90,46 @@ object Operator {
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
 
-  def commonMxM[F[_]](left: Operator[F], right: Operator[F])(
-      cb: Record => F[Unit]
-  )(implicit F: Sync[F], G:GRB): F[Unit] = {
+  def commonMxM(left: Operator, right: Operator)(
+      cb: Record => IO[Unit]
+  )(implicit G:GRB): IO[Unit] = {
     left.eval {
-      case left: MatrixRecord[F] @ unchecked =>
+      case left: MatrixRecord @ unchecked =>
         right.eval {
-          case right: MatrixRecord[F] @ unchecked  =>
-            F.bracket(F.delay(right.mat)) { edges =>
-              MxM[F]
+          case right: MatrixRecord @ unchecked  =>
+            MonadCancel[IO].bracket(IO.delay(right.mat)) { edges =>
+              MxM[IO]
                 .mxm(left.mat)(left.mat, edges)(semiRing)
                 .flatMap(rec => cb(MatrixRecord(rec)))
             }(_.release)
-          case e: Edges[F] =>
+          case e: Edges =>
             e.mat
-              .use[GrBMatrix[F, Boolean]] { edges =>
-                MxM[F].mxm(left.mat)(left.mat, edges)(semiRing)
+              .use[GrBMatrix[IO, Boolean]] { edges =>
+                MxM[IO].mxm(left.mat)(left.mat, edges)(semiRing)
               }
               .flatMap(mat => cb(MatrixRecord(mat)))
-          case n: Nodes[F] => // filter case (maybe we should break MatrixMul into 2 operators one for Expand and one for filter)
+          case n: Nodes => // filter case (maybe we should break MatrixMul into 2 operators one for Expand and one for filter)
             n.mat
-              .use { nodes => MxM[F].mxm(left.mat)(left.mat, nodes)(semiRing) }
+              .use { nodes => MxM[IO].mxm(left.mat)(left.mat, nodes)(semiRing) }
               .flatMap(mat => cb(MatrixRecord(mat)))
         }
-      case left: Nodes[F] =>
+      case left: Nodes =>
         right.eval {
-          case right: MatrixRecord[F] =>
+          case right: MatrixRecord =>
             left.mat.use { nodes =>
-              MxM[F]
+              MxM[IO]
                 .mxm(right.mat)(nodes, right.mat)(semiRing)
                 .flatMap(rec => cb(MatrixRecord(rec)))
             }
-          case e: Edges[F] =>
+          case e: Edges =>
             e.mat
-              .use[GrBMatrix[F, Boolean]] { edges =>
+              .use[GrBMatrix[IO, Boolean]] { edges =>
                 left.mat.use { nodes =>
                   for {
                     shape <- edges.shape
                     (rows, cols) = shape
-                    out <- GrBMatrix.unsafe[F, Boolean](rows, cols)
-                    output <- MxM[F].mxm(out)(nodes, edges)(semiRing)
+                    out <- GrBMatrix.unsafe[IO, Boolean](rows, cols)
+                    output <- MxM[IO].mxm(out)(nodes, edges)(semiRing)
                   } yield output
                 }
               }
@@ -147,10 +146,10 @@ object Operator {
   * entry of the actual phisical
   * operator
   * */
-case class RefOperator[F[_]: Monad](logic: LogicMemoRef[F])
-    extends Operator[F] {
+case class RefOperator(logic: LogicMemoRef)
+    extends Operator {
 
-  override def eval(cb: Record => F[Unit]): F[Unit] = Monad[F].unit
+  override def eval(cb: Record => IO[Unit]): IO[Unit] = IO.unit
 
   override def sorted: Option[Name] = logic.sorted
 
@@ -160,16 +159,16 @@ case class RefOperator[F[_]: Monad](logic: LogicMemoRef[F])
 
 }
 
-sealed trait EdgeMatrix[F[_]] extends Operator[F]
+sealed trait EdgeMatrix extends Operator
 
-case class GetNodeMatrix[F[_]](
+case class GetNodeMatrix(
     binding: Name,
     name: Option[String],
-    nodes: BlockingMatrix[F, Boolean],
+    nodes: BlockingMatrix[Boolean],
     cardinality: Long // very likely nodes.nvals
-) extends Operator[F] {
+) extends Operator {
 
-  override def eval(cb: Record => F[Unit]): F[Unit] =
+  override def eval(cb: Record => IO[Unit]): IO[Unit] =
     cb(Nodes(nodes))
 
   override def sorted: Option[Name] = Some(binding)
@@ -178,14 +177,14 @@ case class GetNodeMatrix[F[_]](
 
 }
 
-case class GetEdgeMatrix[F[_]](
+case class GetEdgeMatrix(
     binding: Option[Name],
     name: Option[String],
-    edges: BlockingMatrix[F, Boolean],
+    edges: BlockingMatrix[Boolean],
     cardinality: Long // very likely edges.nvals
-) extends EdgeMatrix[F] {
+) extends EdgeMatrix {
 
-  override def eval(cb: Record => F[Unit]): F[Unit] =
+  override def eval(cb: Record => IO[Unit]): IO[Unit] =
     cb(Edges(edges))
 
   override def sorted: Option[Name] = None
@@ -194,16 +193,16 @@ case class GetEdgeMatrix[F[_]](
 
 }
 
-case class ExpandMul[F[_]](
-    frontier: Operator[F],
-    edges: Operator[F]
-)(implicit F: Sync[F], G: GRB)
-    extends Operator[F] {
+case class ExpandMul(
+    frontier: Operator,
+    edges: Operator
+)(implicit G: GRB)
+    extends Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
 
-  override def eval(cb: Record => F[Unit]): F[Unit] = {
+  override def eval(cb: Record => IO[Unit]): IO[Unit] = {
     Operator.commonMxM(frontier, edges)(cb)
   }
 
@@ -215,16 +214,16 @@ case class ExpandMul[F[_]](
 
 }
 
-case class FilterMul[F[_]](
-    frontier: Operator[F],
-    filter: Operator[F]
-)(implicit F: Sync[F], G: GRB)
-    extends Operator[F] {
+case class FilterMul(
+    frontier: Operator,
+    filter: Operator
+)(implicit G: GRB)
+    extends Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
 
-  override def eval(cb: Record => F[Unit]): F[Unit] = {
+  override def eval(cb: Record => IO[Unit]): IO[Unit] = {
     Operator.commonMxM(frontier, filter)(cb)
   }
 
@@ -237,13 +236,13 @@ case class FilterMul[F[_]](
 }
 
 //FIXME: trivial renderer that will push every item onto a buffer
-case class Render[F[_]: Monad](op: Operator[F]) extends Operator[F] {
+case class Render(op: Operator) extends Operator {
 
   import scala.collection.mutable
 
-  override def eval(cb: Record => F[Unit]): F[Unit] = {
+  override def eval(cb: Record => IO[Unit]): IO[Unit] = {
     op.eval {
-      case rec: MatrixRecord[F] =>
+      case rec: MatrixRecord =>
         for {
           data <- rec.mat.extract
           (is, js, _) = data
@@ -271,12 +270,12 @@ object Expand {
     * shared between threads
     * */
   lazy val staticAnyPairSemiring: GrBSemiring[Boolean, Boolean, Boolean] = {
-    val (semi, shutdown) = GrBSemiring.anyPair[IO].allocated.unsafeRunSync()
+    val (semi, shutdown) = GrBSemiring.anyPair[IO].allocated.unsafeRunSync()(IORuntime.global)
     Runtime
       .getRuntime()
       .addShutdownHook(new Thread() {
         override def run: Unit = {
-          shutdown.unsafeRunSync()
+          shutdown.unsafeRunSync()(IORuntime.global)
         }
       })
     semi

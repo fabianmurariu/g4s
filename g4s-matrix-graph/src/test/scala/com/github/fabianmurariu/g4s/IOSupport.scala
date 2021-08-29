@@ -1,13 +1,10 @@
 package com.github.fabianmurariu.g4s
 
-import cats.effect.{ContextShift, IO}
-
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import cats.effect.IO
 
 abstract class IOSupport extends munit.FunSuite {
 
-  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
-  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val runtime =  cats.effect.unsafe.IORuntime.global
 
   override def munitValueTransforms: List[ValueTransform] = super.munitValueTransforms ++ List(
     new ValueTransform("IO", {

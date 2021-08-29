@@ -1,26 +1,26 @@
 package com.github.fabianmurariu.g4s.optim
 
-import cats.effect.Sync
 import cats.implicits._
 import com.github.fabianmurariu.g4s.optim.{impls => op}
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import java.util.concurrent.ConcurrentHashMap
-import cats.effect.concurrent.Ref
+import cats.effect.kernel.Ref
+import cats.effect.IO
 
-class Memo[F[_]: Sync](
+class Memo(
     val rootPlans: Map[Binding, LogicNode],
-    val stack: Ref[F, List[Group[F]]],
-    val table: ConcurrentHashMap[String, Group[F]]) {
+    val stack: Ref[IO, List[Group]],
+    val table: ConcurrentHashMap[String, Group]) {
 
-  def pop: F[Option[Group[F]]] =
+  def pop: IO[Option[Group]] =
     stack.modify{
       case head :: tail => (tail, Some(head))
       case Nil => (Nil, None)
     }
 
-  def isDone: F[Boolean] = stack.modify(list => (list, list.isEmpty))
+  def isDone: IO[Boolean] = stack.modify(list => (list, list.isEmpty))
 
-  def insertGroup(logic: LogicNode): F[Group[F]] = {
+  def insertGroup(logic: LogicNode): IO[Group] = {
     for {
       newG <- Group(this, logic)
       g <- stack.modify{s =>
@@ -33,24 +33,24 @@ class Memo[F[_]: Sync](
 
   }
 
-  def doEnqueuePlan(logic: LogicNode): F[Group[F]] = logic match {
-    case ref: LogicMemoRef[F] => Sync[F].delay(ref.group)
+  def doEnqueuePlan(logic: LogicNode): IO[Group] = logic match {
+    case ref: LogicMemoRef => IO.delay(ref.group)
     case _ =>
 
-      Sync[F].delay(println(s"Enqueue $logic")) *> Sync[F].delay(logic.leaf).flatMap {
+      IO.delay(println(s"Enqueue $logic")) *> IO.delay(logic.leaf).flatMap {
         case true =>
           insertGroup(logic)
         case false =>
           logic.children.toVector
-            .foldM(Vector.newBuilder[LogicMemoRef[F]]) {
+            .foldM(Vector.newBuilder[LogicMemoRef]) {
               case (builder, child) =>
                 doEnqueuePlan(child).flatMap(group =>
-                  Sync[F].delay {
+                  IO.delay {
                     builder += LogicMemoRef(group)
                   }
                 )
             }
-            .map { cs => logic.asInstanceOf[ForkNode].rewire[F](cs.result()) }
+            .map { cs => logic.asInstanceOf[ForkNode].rewire(cs.result()) }
             .flatMap(insertGroup(_))
       }
   }
@@ -61,39 +61,39 @@ class Memo[F[_]: Sync](
     *
     * start from the root plans and
     * */
-  def physical(name: Binding)(implicit G: GRB): F[op.Operator[F]] = {
+  def physical(name: Binding)(implicit G: GRB): IO[op.Operator] = {
 
-    def optimPhysicalPlan(signature: String): F[op.Operator[F]] = {
+    def optimPhysicalPlan(signature: String): IO[op.Operator] = {
 
       for {
-        grp <- Sync[F].delay(table.get(signature))
+        grp <- IO.delay(table.get(signature))
         minGroupMember <- grp.optGroupMember
-        refPlan <- minGroupMember.plan.pure[F]
+        refPlan <- IO(minGroupMember.plan)
         plan <- refPlan match {
-          case _: op.RefOperator[F] =>
-            Sync[F].raiseError(
+          case _: op.RefOperator =>
+            IO.raiseError(
               new IllegalStateException(
                 "Local Optimal plan cannot be RefOperator"
               )
             )
-          case op.ExpandMul(from: op.RefOperator[F], to: op.RefOperator[F]) =>
+          case op.ExpandMul(from: op.RefOperator, to: op.RefOperator) =>
             for {
               optimFrom <- optimPhysicalPlan(from.logic.signature)
               optimTo <- optimPhysicalPlan(to.logic.signature)
             } yield op.ExpandMul(optimFrom, optimTo)
 
-          case op.FilterMul(from: op.RefOperator[F], to: op.RefOperator[F]) =>
+          case op.FilterMul(from: op.RefOperator, to: op.RefOperator) =>
             for {
               optimFrom <- optimPhysicalPlan(from.logic.signature)
               optimTo <- optimPhysicalPlan(to.logic.signature)
             } yield op.FilterMul(optimFrom, optimTo)
-          case op => op.pure[F]
+          case op => IO(op)
         }
       } yield plan
     }
 
     for {
-      logic <- Sync[F].delay(rootPlans(name))
+      logic <- IO.delay(rootPlans(name))
       plan <- optimPhysicalPlan(logic.signature)
     } yield plan
 
@@ -102,10 +102,10 @@ class Memo[F[_]: Sync](
 }
 
 object Memo {
-  def apply[F[_]: Sync](
+  def apply(
       rootPlans: Map[Binding, LogicNode],
-  ): F[Memo[F]] = Ref.of(List.empty[Group[F]]).map{ stack =>
-    val table = new ConcurrentHashMap[String, Group[F]]
+  ): IO[Memo] = Ref.of[IO,List[Group]](List.empty[Group]).map{ stack =>
+    val table = new ConcurrentHashMap[String, Group]
     new Memo(rootPlans, stack, table)
   }
 }

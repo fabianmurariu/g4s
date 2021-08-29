@@ -2,19 +2,19 @@ package com.github.fabianmurariu.g4s.graph
 
 import java.util.concurrent.ConcurrentHashMap
 
-import cats.effect.{Sync, concurrent}
-import cats.implicits._
 import scala.reflect.ClassTag
+import cats.effect.IO
+import cats.effect.kernel.Ref
 
-trait DataStore[F[_], V, E] {
+trait DataStore[V, E] {
 
-  def persistV(v: V): F[Long]
+  def persistV(v: V): IO[Long]
 
-  def persistE(src: Long, dst: Long, e: E): F[Unit]
+  def persistE(src: Long, dst: Long, e: E): IO[Unit]
 
-  def getV(id: Long): F[Option[V]]
+  def getV(id: Long): IO[Option[V]]
 
-  def getVs(ids: Array[Long]): F[Array[V]]
+  def getVs(ids: Array[Long]): IO[Array[V]]
 }
 
 object DataStore {
@@ -25,15 +25,15 @@ object DataStore {
       in: ConcurrentHashMap[Long, E]
   )
 
-  private class DefaultDataStoreImpl[F[_], V, E](
-      ids: concurrent.Ref[F, Long],
+  private class DefaultDataStoreImpl[V, E](
+      ids: Ref[IO, Long],
       map: ConcurrentHashMap[Long, NodeBlock[V, E]]
-  )(implicit F: Sync[F], CT: ClassTag[V])
-      extends DataStore[F, V, E] {
+  )(implicit CT: ClassTag[V])
+      extends DataStore[V, E] {
 
-    def nodeDefault(v: V): F[
+    def nodeDefault(v: V): IO[
       java.util.function.BiFunction[Long, NodeBlock[V, E], NodeBlock[V, E]]
-    ] = F.pure(
+    ] = IO.delay(
       {
         case (_, null) =>
           NodeBlock(v, new ConcurrentHashMap(), new ConcurrentHashMap())
@@ -41,16 +41,16 @@ object DataStore {
       }
     )
 
-    override def persistV(v: V): F[Long] =
+    override def persistV(v: V): IO[Long] =
       for {
         vId <- ids.getAndUpdate(id => id + 1L)
         blockBuilder <- nodeDefault(v)
-        _ <- F.delay(map.compute(vId, blockBuilder))
+        _ <- IO.delay(map.compute(vId, blockBuilder))
       } yield vId
 
-    def edgeOut(dst: Long, e: E): F[
+    def edgeOut(dst: Long, e: E): IO[
       java.util.function.BiFunction[Long, NodeBlock[V, E], NodeBlock[V, E]]
-    ] = F.pure(
+    ] = IO.delay(
       {
         case (_, nb @ NodeBlock(_, outMap, _)) =>
           outMap.put(dst, e)
@@ -58,9 +58,9 @@ object DataStore {
       }
     )
 
-    def edgeIn(src: Long, e: E): F[
+    def edgeIn(src: Long, e: E): IO[
       java.util.function.BiFunction[Long, NodeBlock[V, E], NodeBlock[V, E]]
-    ] = F.pure(
+    ] = IO.delay(
       {
         case (_, nb @ NodeBlock(_, _, inMap)) =>
           inMap.put(src, e)
@@ -68,22 +68,21 @@ object DataStore {
       }
     )
 
-    override def persistE(src: Long, dst: Long, e: E): F[Unit] =
+    override def persistE(src: Long, dst: Long, e: E): IO[Unit] =
       for {
         srcUpdate <- edgeOut(dst, e)
         dstUpdate <- edgeIn(src, e)
-        _ <- F.delay {
+        _ <- IO.delay {
           map.compute(src, srcUpdate)
           map.compute(dst, dstUpdate)
         }
       } yield ()
 
-    override def getV(id: Long): F[Option[V]] =
-      F.delay(Option(map.get(id)).map(_.v))
+    override def getV(id: Long): IO[Option[V]] =
+      IO.delay(Option(map.get(id)).map(_.v))
 
-    def getVs(ids: Array[Long]): F[Array[V]] =
-      F.delay {
-        println(s"FROM DATASTORE ${ids.toVector}")
+    def getVs(ids: Array[Long]): IO[Array[V]] =
+      IO.delay {
         ids.iterator
           .map(map.get(_))
           .filter(_ != null)
@@ -92,11 +91,8 @@ object DataStore {
       }
   }
 
-  def default[F[_], V, E](
-      implicit S: Sync[F],
-      CT: ClassTag[V]
-  ): F[DataStore[F, V, E]] =
-    concurrent.Ref
-      .of[F, Long](0)
+  def default[V:ClassTag, E]: IO[DataStore[V, E]] =
+    Ref[IO]
+      .of(0L)
       .map(ref => new DefaultDataStoreImpl(ref, new ConcurrentHashMap()))
 }
