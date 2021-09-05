@@ -43,7 +43,7 @@ case class VertexContainer[V, E](
 }
 
 case class MutableGraph[V, E](
-    val map: mutable.HashMap[V, VertexContainer[V, E]]
+    val map: mutable.HashMap[V, VertexContainer[V, E]] = mutable.HashMap.empty[V, VertexContainer[V, E]]
 )
 
 object MutableGraph {

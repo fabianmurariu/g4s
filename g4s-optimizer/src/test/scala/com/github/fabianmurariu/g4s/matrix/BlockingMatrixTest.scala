@@ -5,7 +5,6 @@ import munit.ScalaCheckSuite
 import org.scalacheck.Prop._
 import com.github.fabianmurariu.g4s.sparse.grbv2.MatrixTuples
 import cats.effect.IO
-import scala.concurrent.ExecutionContext
 import cats.effect.Resource
 import cats.effect.kernel.Ref
 

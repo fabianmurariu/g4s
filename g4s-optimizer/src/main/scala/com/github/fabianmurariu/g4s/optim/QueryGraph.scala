@@ -13,21 +13,12 @@ import DirectedGraph.ops._
 import scala.util.control.NonFatal
 
 class QueryGraph(
-    val g: MutableGraph[Node, Edge],
     val returns: Set[Binding]
-) {
-  def insert(n: Node) = g.insert(n)
-  def get(n: Node): Option[Node] = g.get(n)
-  def edge(src: Node, e: Edge, dst: Node) = g.edge(src, e, dst)
-  def neighbours(n: Node) = g.neighbours(n)
+) extends MutableGraph[Node, Edge]() {
   def isReturn(n: Node) = n.name match {
     case b: Binding => returns(b)
     case _          => false
   }
-  def out(v: Node) = g.out(v)
-  def in(v: Node) = g.in(v)
-  def getEdge(src: Node, dst: Node): Option[(Node, Edge, Node)] =
-    g.getEdge(src, dst)
 }
 
 object QueryGraph {
@@ -54,7 +45,7 @@ object QueryGraph {
   }
 
   def apply(roots: Set[Binding]) =
-    new QueryGraph(MutableGraph.empty[Node, Edge], roots)
+    new QueryGraph(roots)
 
   def patternToQueryGraph(
       g: QueryGraph,

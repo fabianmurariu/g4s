@@ -10,8 +10,9 @@ private[grbv2] sealed trait Pointer extends AutoCloseable {
 
 class MatrixPointer(val ref: Buffer)(implicit G:GRB) extends Pointer {
 
-  override def close(): Unit =
+  override def close(): Unit = {
     GRBCORE.freeMatrix(ref)
+  }
 
 }
 

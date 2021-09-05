@@ -10,12 +10,13 @@ import cats.effect.IO
 class Memo(
     val rootPlans: Map[Binding, LogicNode],
     val stack: Ref[IO, List[Group]],
-    val table: ConcurrentHashMap[String, Group]) {
+    val table: ConcurrentHashMap[String, Group]
+) {
 
   def pop: IO[Option[Group]] =
-    stack.modify{
+    stack.modify {
       case head :: tail => (tail, Some(head))
-      case Nil => (Nil, None)
+      case Nil          => (Nil, None)
     }
 
   def isDone: IO[Boolean] = stack.modify(list => (list, list.isEmpty))
@@ -23,7 +24,7 @@ class Memo(
   def insertGroup(logic: LogicNode): IO[Group] = {
     for {
       newG <- Group(this, logic)
-      g <- stack.modify{s =>
+      g <- stack.modify { s =>
         // this is cute because table.put is idempotent
         // so this block can run however many times and it will update the stack exactly once
         table.putIfAbsent(logic.signature, newG)
@@ -36,8 +37,7 @@ class Memo(
   def doEnqueuePlan(logic: LogicNode): IO[Group] = logic match {
     case ref: LogicMemoRef => IO.delay(ref.group)
     case _ =>
-
-      IO.delay(println(s"Enqueue $logic")) *> IO.delay(logic.leaf).flatMap {
+      IO.delay(println(s"ENQUEUE $logic")) *> IO.delay(logic.leaf).flatMap {
         case true =>
           insertGroup(logic)
         case false =>
@@ -87,6 +87,13 @@ class Memo(
               optimFrom <- optimPhysicalPlan(from.logic.signature)
               optimTo <- optimPhysicalPlan(to.logic.signature)
             } yield op.FilterMul(optimFrom, optimTo)
+
+          case op.FilterMul(from: op.RefOperator, op.Diag(inner:op.RefOperator)) =>
+            for {
+              optimFrom <- optimPhysicalPlan(from.logic.signature)
+              optimInner <- optimPhysicalPlan(inner.logic.signature)
+            } yield op.FilterMul(optimFrom, op.Diag(optimInner))
+
           case op => IO(op)
         }
       } yield plan
@@ -103,8 +110,8 @@ class Memo(
 
 object Memo {
   def apply(
-      rootPlans: Map[Binding, LogicNode],
-  ): IO[Memo] = Ref.of[IO,List[Group]](List.empty[Group]).map{ stack =>
+      rootPlans: Map[Binding, LogicNode]
+  ): IO[Memo] = Ref.of[IO, List[Group]](List.empty[Group]).map { stack =>
     val table = new ConcurrentHashMap[String, Group]
     new Memo(rootPlans, stack, table)
   }

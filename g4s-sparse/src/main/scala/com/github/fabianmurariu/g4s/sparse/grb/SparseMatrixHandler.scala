@@ -16,6 +16,7 @@ trait SparseMatrixHandler[@specialized(Boolean, Byte, Short, Int, Long, Float, D
 
   def setAll(mat: Buffer)(is: Array[Long], js: Array[Long], ts: Array[T]): Unit = {
     assert(is.length == js.length && js.length == ts.length)
+    println("SET ALL ON: "+Thread.currentThread().getId())
     var i = 0
     while (i < is.length) {
       set(mat)(is(i), js(i), ts(i))

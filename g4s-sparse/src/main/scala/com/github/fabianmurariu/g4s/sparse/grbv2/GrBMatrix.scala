@@ -24,6 +24,9 @@ sealed class GrBMatrix[F[_]: Sync, A: Reduce: SMH: ClassTag](
   private[grbv2] def liftPointer(mp: MatrixPointer): GrBMatrix[F, A] =
     new GrBMatrix(Sync[F].pure(mp))
 
+  override def assignToDiag(vec: GrBVector[F, A], diag:Long = 0L): F[Unit] =
+    GrBMatrixOps.diag(this.pointer, vec.pointer, diag)
+
   override def empty(rows: Long, cols: Long): Resource[F, this.type] = ???
 
   override def get(i: Long, j: Long): F[Option[A]] =

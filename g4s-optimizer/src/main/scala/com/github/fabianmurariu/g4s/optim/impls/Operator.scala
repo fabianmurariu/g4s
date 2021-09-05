@@ -12,6 +12,10 @@ import com.github.fabianmurariu.g4s.optim.Binding
 import com.github.fabianmurariu.g4s.optim.UnNamed
 import cats.effect.kernel.MonadCancel
 import cats.effect.unsafe.IORuntime
+import com.github.fabianmurariu.g4s.sparse.grbv2.GrBVector
+import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
+import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBoolBinaryOps
+import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 
 /**
   * base class for push operators
@@ -44,6 +48,8 @@ trait Operator { self =>
     */
   def cardinality: Long
 
+  // def cost: F[Long]
+
   private def showInner: List[String] = {
     val sortedText =
       self.sorted.collect { case Binding(name) => name }.getOrElse("")
@@ -66,9 +72,10 @@ trait Operator { self =>
     case _: GetNodeMatrix =>
       val textBlocks = showInner.mkString(", ")
       s"Nodes[$textBlocks]"
-    case _: GetEdgeMatrix =>
+    case em: GetEdgeMatrix =>
       val textBlocks = showInner.mkString(", ")
-      s"Edges[$textBlocks]"
+      val name = em.name.mkString("[",",","]")
+      s"Edges[$textBlocks, label=$name, transpose=${em.transpose}]"
     case ExpandMul(left, right) =>
       val padding = offset + "  "
       val textBlocks = showInner.mkString(", ")
@@ -79,6 +86,10 @@ trait Operator { self =>
       val textBlocks = showInner.mkString(", ")
       s"""FilterMul[$textBlocks]:\n${padding}l=${left
         .show(padding)}\n${padding}r=${right.show(padding)}"""
+    case Diag(op) =>
+      val padding = offset + "  "
+      val textBlocks = showInner.mkString(", ")
+      s"""Diag[$textBlocks]:\n${padding}on=${op.show(padding)}"""
     case RefOperator(_) =>
       val textBlocks = showInner.mkString(", ")
       s"Ref[${textBlocks}]"
@@ -92,11 +103,11 @@ object Operator {
 
   def commonMxM(left: Operator, right: Operator)(
       cb: Record => IO[Unit]
-  )(implicit G:GRB): IO[Unit] = {
+  )(implicit G: GRB): IO[Unit] = {
     left.eval {
-      case left: MatrixRecord @ unchecked =>
+      case left: MatrixRecord @unchecked =>
         right.eval {
-          case right: MatrixRecord @ unchecked  =>
+          case right: MatrixRecord @unchecked =>
             MonadCancel[IO].bracket(IO.delay(right.mat)) { edges =>
               MxM[IO]
                 .mxm(left.mat)(left.mat, edges)(semiRing)
@@ -146,16 +157,15 @@ object Operator {
   * entry of the actual phisical
   * operator
   * */
-case class RefOperator(logic: LogicMemoRef)
-    extends Operator {
+case class RefOperator(logic: LogicMemoRef) extends Operator {
 
-  override def eval(cb: Record => IO[Unit]): IO[Unit] = IO.unit
+  def eval(cb: Record => IO[Unit]): IO[Unit] = IO.unit
 
-  override def sorted: Option[Name] = logic.sorted
+  def sorted: Option[Name] = None
 
-  override def output: Seq[Name] = logic.output
+  def output: Seq[Name] = logic.output
 
-  override def cardinality: Long = -1
+  def cardinality: Long = -1
 
 }
 
@@ -168,12 +178,12 @@ case class GetNodeMatrix(
     cardinality: Long // very likely nodes.nvals
 ) extends Operator {
 
-  override def eval(cb: Record => IO[Unit]): IO[Unit] =
+  def eval(cb: Record => IO[Unit]): IO[Unit] =
     cb(Nodes(nodes))
 
-  override def sorted: Option[Name] = Some(binding)
+  def sorted: Option[Name] = Some(binding)
 
-  override def output: Seq[Name] = Seq(binding)
+  def output: Seq[Name] = Seq(binding)
 
 }
 
@@ -181,15 +191,16 @@ case class GetEdgeMatrix(
     binding: Option[Name],
     name: Option[String],
     edges: BlockingMatrix[Boolean],
+    transpose: Boolean,
     cardinality: Long // very likely edges.nvals
 ) extends EdgeMatrix {
 
-  override def eval(cb: Record => IO[Unit]): IO[Unit] =
+  def eval(cb: Record => IO[Unit]): IO[Unit] =
     cb(Edges(edges))
 
-  override def sorted: Option[Name] = None
+  def sorted: Option[Name] = None
 
-  override def output: Seq[Name] = binding.toSeq
+  def output: Seq[Name] = binding.toSeq
 
 }
 
@@ -202,15 +213,15 @@ case class ExpandMul(
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
 
-  override def eval(cb: Record => IO[Unit]): IO[Unit] = {
+  def eval(cb: Record => IO[Unit]): IO[Unit] = {
     Operator.commonMxM(frontier, edges)(cb)
   }
 
-  override def sorted: Option[Name] = frontier.sorted
+  def sorted: Option[Name] = frontier.sorted
 
-  override def output: Seq[Name] = frontier.output ++ edges.output.lastOption
+  def output: Seq[Name] = frontier.output ++ edges.output.lastOption
 
-  override def cardinality: Long = frontier.cardinality * edges.cardinality
+  def cardinality: Long = frontier.cardinality * edges.cardinality
 
 }
 
@@ -223,24 +234,56 @@ case class FilterMul(
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
 
-  override def eval(cb: Record => IO[Unit]): IO[Unit] = {
+  def eval(cb: Record => IO[Unit]): IO[Unit] = {
     Operator.commonMxM(frontier, filter)(cb)
   }
 
-  override def sorted: Option[Name] = frontier.sorted
+  def sorted: Option[Name] = frontier.sorted
 
-  override def output: Seq[Name] = frontier.output ++ filter.output.lastOption
+  def output: Seq[Name] = frontier.output ++ filter.output.lastOption
   // the filter should never output more than the input
-  override def cardinality: Long = frontier.cardinality
+  def cardinality: Long = frontier.cardinality
+
+}
+
+case class Diag(op: Operator) extends Operator {
+
+  def eval(cb: Record => IO[Unit]): IO[Unit] =
+    op.eval {
+      case MatrixRecord(mat) =>
+        for {
+          shape <- mat.shape
+          (rows, cols) = shape
+          _ <- mat.show().map(println)
+          _ <- mat.reduceColumns(BuiltInBinaryOps.boolean.lor, None).use { vec =>
+            mat.assignToDiag(vec)
+          }
+          _ <- mat.show().map(println)
+          _ <- cb(MatrixRecord(mat))
+        } yield ()
+    }
+
+  def sorted: Option[Name] = op.sorted
+
+  def output: Seq[Name] = op.output.lastOption.toSeq
+
+  // max cardinality is the number of items on the diagonal
+  // we estimate as 1/10
+  def cardinality: Long = op.cardinality / 10
+
+  def cost:Long = ???//FIXME: COST AND CARDINALITY ARE TWO DIFFERENT BEASTS!
+                  //the output from this operation is at least the same as the prev operator
+                  //the cost involves a reduce then then arranging the vector
+                  //on the matrix diag
 
 }
 
 //FIXME: trivial renderer that will push every item onto a buffer
-case class Render(op: Operator) extends Operator {
+case class MatrixTuples(op: Operator) extends Operator {
 
   import scala.collection.mutable
 
-  override def eval(cb: Record => IO[Unit]): IO[Unit] = {
+  def eval(cb: Record => IO[Unit]): IO[Unit] = {
     op.eval {
       case rec: MatrixRecord =>
         for {
@@ -252,15 +295,16 @@ case class Render(op: Operator) extends Operator {
     }
   }
 
-  override def sorted: Option[Name] = ???
+  def sorted: Option[Name] = ???
 
-  override def output: Seq[Name] = ???
+  def output: Seq[Name] = ???
 
-  override def cardinality: Long = ???
+  def cardinality: Long = ???
 
 }
 
 object Expand {
+
   import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 
   /**
@@ -270,7 +314,8 @@ object Expand {
     * shared between threads
     * */
   lazy val staticAnyPairSemiring: GrBSemiring[Boolean, Boolean, Boolean] = {
-    val (semi, shutdown) = GrBSemiring.anyPair[IO].allocated.unsafeRunSync()(IORuntime.global)
+    val (semi, shutdown) =
+      GrBSemiring.anyPair[IO].allocated.unsafeRunSync()(IORuntime.global)
     Runtime
       .getRuntime()
       .addShutdownHook(new Thread() {
@@ -280,4 +325,5 @@ object Expand {
       })
     semi
   }
+
 }

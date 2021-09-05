@@ -9,7 +9,7 @@ sealed abstract class Rule
   def eval(
       member: GroupMember,
       graph: EvaluatorGraph
-  ): IO[List[GroupMember]] = IO.defer{
+  ): IO[List[GroupMember]] = IO.defer {
     if (isDefinedAt(member)) {
       apply(member, graph)
     } else {
@@ -82,11 +82,11 @@ class LoadEdges extends ImplementationRule {
   ): IO[List[GroupMember]] =
     IO.defer {
       gm.logic match {
-        case GetEdges((tpe: String) :: _, sorted, transpose) =>
+        case GetEdges((tpe: String) :: _, transpose) =>
           graph.lookupEdges(tpe, transpose).map {
             case (mat, card) =>
               val physical: op.Operator =
-                GetEdgeMatrix(sorted, Some(tpe), mat, card)
+                GetEdgeMatrix(None, Some(tpe), mat, transpose, card)
               List(
                 EvaluatedGroupMember(gm.logic, physical)
               )
@@ -125,6 +125,53 @@ class LoadNodes extends ImplementationRule {
 
   override def isDefinedAt(gm: GroupMember): Boolean =
     gm.logic.isInstanceOf[GetNodes]
+
+}
+
+
+/**
+ *  .. (a)-[]->(b)-[]->(c) return b
+ *
+ * the tree breaks into 2 branches
+ * (a)-[]->(b)
+ * (c)<-[]-(b)
+ *  *
+ * depending on direction these need to be joined on b
+ * and/or sorted
+ *
+ * */
+class TreeJoinDiagFilter extends ImplementationRule {
+
+  override def apply(gm: GroupMember, v2: EvaluatorGraph): IO[List[GroupMember]] =
+    gm.logic match {
+      case Join(on, Vector(left:LogicMemoRef, right:LogicMemoRef, _*)) =>
+        // diag on left FIXME: this is not complete but it's easy to express now
+        // probably requires a transformation rule to generate the binary join trees
+        // from the initial list
+        IO.delay{
+          (left.plan, right.plan) match {
+            case (Filter(front1:LogicMemoRef, _), Filter(front2:LogicMemoRef, _)) =>
+              List(
+                EvaluatedGroupMember(gm.logic,
+                                    op.FilterMul(
+                                      op.RefOperator(front1),
+                                      op.Diag(op.RefOperator(right)))),
+                EvaluatedGroupMember(gm.logic,
+                                    op.FilterMul(
+                                      op.RefOperator(front2),
+                                      op.Diag(op.RefOperator(left))))
+              )
+          }
+        }
+
+    }
+
+  override def isDefinedAt(gm: GroupMember): Boolean = gm.logic match {
+    case Join(_, Vector(l:LogicMemoRef, r:LogicMemoRef, _*)) =>
+      r.plan.isInstanceOf[Filter] && l.plan.isInstanceOf[Filter]
+    case _ => false
+  }
+
 
 }
 

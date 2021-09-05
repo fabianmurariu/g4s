@@ -41,6 +41,8 @@ trait SparseMatrix[F[_],@specialized(Boolean, Byte, Short, Int, Long, Float, Dou
 
   def reduceN(monoid: GrBMonoid[A])(implicit N: Numeric[A]): F[A]
 
+  def assignToDiag(vec: GrBVector[F, A], diag:Long = 0): F[Unit]
+
   def transpose[X](
       mask: Option[GrBMatrix[F, X]] = None,
       accum: Option[GrBBinaryOp[A, A, A]] = None,

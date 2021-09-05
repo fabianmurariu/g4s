@@ -3,7 +3,7 @@ ThisBuild / scalaVersion := "2.13.4"
 ThisBuild / organization := "com.github.fabianmurariu"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 
-val grbVersion = s"0.1.22-${sys.props("os.name").toLowerCase()}"
+val grbVersion = s"0.1.24-${sys.props("os.name").toLowerCase()}"
 lazy val munitVersion = "0.7.11" 
 lazy val fs2Version = "3.1.1"
 lazy val catsEffectVersion = "3.2.3"

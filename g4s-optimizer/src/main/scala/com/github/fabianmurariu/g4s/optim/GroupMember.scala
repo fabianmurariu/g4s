@@ -10,7 +10,6 @@ sealed abstract class GroupMember { self =>
       rules: Vector[Rule],
       graph: EvaluatorGraph
   ): IO[Vector[GroupMember]] = {
-    IO.delay(println(s"Exploring member $this")) *>
       rules
         .map(rule => rule.eval(this, graph))
         .sequence

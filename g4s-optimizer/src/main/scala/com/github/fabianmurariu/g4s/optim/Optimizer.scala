@@ -44,6 +44,7 @@ object Optimizer {
     new LoadEdges,
     new LoadNodes,
     new Filter2MxM,
-    new Expand2MxM
+    new Expand2MxM,
+    new TreeJoinDiagFilter
   ))
 }

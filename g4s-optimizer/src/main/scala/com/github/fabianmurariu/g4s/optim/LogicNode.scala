@@ -5,8 +5,6 @@ import scala.collection.mutable.ArrayBuffer
 abstract class LogicNode(
     cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty // FIXME: this could change in the future
 ) extends TreeNode[LogicNode](cs) { self =>
-  // the left most binding
-  def sorted: Option[Name]
   // the binding outputs of the logical operator
   def output: Seq[Name]
 
@@ -23,6 +21,8 @@ abstract class LogicNode(
       s"Expand(${from.signature},${to.signature},$transpose)"
     case Filter(frontier, filter) =>
       s"Filter(${frontier.signature},${filter.signature})"
+    case Join(on, nodes) =>
+      s"Join($on, [${nodes.map(_.signature).toSet.mkString(",")}]"
   }
 
 }
@@ -34,15 +34,6 @@ sealed abstract class ForkNode(
   def rewire(children: Vector[LogicMemoRef]): LogicNode
 }
 
-case class Return(rets: LogicNode*) extends LogicNode(rets.to(ArrayBuffer)) {
-
-  override def sorted: Option[Name] = None
-
-  override def output: Seq[Name] =
-    rets.map(_.output).reduce(_ ++ _)
-
-}
-
 case class GetNodes(label: Seq[String], sorted: Option[Name] = None)
     extends LogicNode(ArrayBuffer.empty[LogicNode]) {
   def output: Seq[Name] = sorted.toSeq
@@ -50,7 +41,6 @@ case class GetNodes(label: Seq[String], sorted: Option[Name] = None)
 
 case class GetEdges(
     tpe: Seq[String],
-    sorted: Option[Name] = None,
     transpose: Boolean = false
 ) extends LogicNode(ArrayBuffer.empty[LogicNode]) {
   def output: Seq[Name] = Seq.empty
@@ -63,14 +53,12 @@ case class Expand(from: LogicNode, to: LogicNode, transposed: Boolean)
   override def rewire(children: Vector[LogicMemoRef]): LogicNode =
     Expand(children(0), children(1), transposed)
 
-  def sorted: Option[Name] = from.sorted
   def output: Seq[Name] = to.output
 }
 
 // terminate expansions by filtering the output nodes
 case class Filter(frontier: LogicNode, filter: LogicNode)
     extends ForkNode(ArrayBuffer(frontier, filter)) {
-  def sorted: Option[Name] = frontier.sorted
   def output: Seq[Name] = filter.output
 
   override def rewire(children: Vector[LogicMemoRef]): LogicNode =
@@ -79,35 +67,30 @@ case class Filter(frontier: LogicNode, filter: LogicNode)
 
 // join multiple logic nodes
 case class JoinPath(
-    left: LogicNode, // this is the expr to hold on to
-    right: LogicNode,
-    on: Option[Name]
-) extends ForkNode(ArrayBuffer(left, right)) {
-  def output: Seq[Name] = Seq(left, right).map(_.output).reduce(_ ++ _)
-  def sorted: Option[Name] = right.sorted
+    expr: LogicNode, // this is the expr to hold on to
+    cont: LogicNode,
+    on: Name
+) extends ForkNode(ArrayBuffer(expr, cont)) {
+  def output: Seq[Name] = Seq(expr, cont).map(_.output).reduce(_ ++ _)
 
   override def rewire(children: Vector[LogicMemoRef]): LogicNode =
     JoinPath(children(0), children(1), on)
 }
 
-// join into a top node
-case class JoinFork(
-    to: LogicNode, // root of this tree
-    cs: Seq[LogicNode] // children
-) extends ForkNode(to +: cs.to(ArrayBuffer)) {
+// join two branches into a top node
+case class Join(
+    on: LogicNode, // root of this tree
+    cs: Vector[LogicNode] // children
+) extends ForkNode(cs.to(ArrayBuffer)) {
 
   override def rewire(children: Vector[LogicMemoRef]): LogicNode =
-    JoinFork(children(0), children.tail)
-
-  override def sorted: Option[Name] = to.sorted
+    Join(on, children)
 
   override def output: Seq[Name] = children.flatMap(_.output).toSeq
 
 }
 
 case class Diag(node: LogicNode) extends ForkNode(ArrayBuffer(node)) {
-
-  override def sorted: Option[Name] = node.output.headOption
 
   override def output: Seq[Name] = node.output
 
@@ -118,8 +101,6 @@ case class Diag(node: LogicNode) extends ForkNode(ArrayBuffer(node)) {
 case class LogicMemoRef(group: Group)
     extends LogicNode(ArrayBuffer(group.logic)) {
 
-  override def sorted: Option[Name] = plan.sorted
-
   override def output: Seq[Name] = plan.output
 
   def plan: LogicNode = children.next()
@@ -128,10 +109,11 @@ case class LogicMemoRef(group: Group)
 object LogicNode {
 
   import scala.collection.mutable
+  import DirectedGraph.ops._
 
   def fromQueryGraph(
       qg: QueryGraph
-  )(start: Binding): Either[Throwable, LogicNode] = {
+  )(start: Name): Either[Throwable, LogicNode] = {
 
     def transposed(src: Node, dst: Node): Boolean = {
       val Some((s, _, d)) = qg.getEdge(src, dst)
@@ -144,9 +126,9 @@ object LogicNode {
         root: Node,
         seen: mutable.Set[Node]
     ) = {
-      val from = dfsInner(child, seen + root)
+      val from = dfsInner(child, seen ++ Set(root))
       val t = transposed(child, root)
-      def edges = GetEdges(edge.types, None, t)
+      def edges = GetEdges(edge.types, t)
 
       val to = GetNodes(root.labels, Some(root.name))
 
@@ -159,13 +141,13 @@ object LogicNode {
         root: Node,
         seen: mutable.Set[Node]
     ) = {
-      val from = dfsInner(child, seen + root)
+      val from = dfsInner(child, seen ++ Set(root))
       val t = transposed(child, root)
       val to = GetNodes(root.labels, Some(root.name))
-      val edges = GetEdges(edge.types, None, t)
+      val edges = GetEdges(edge.types, t)
 
       val right = Filter(Expand(Diag(from), edges, true), to)
-      JoinPath(left = from, right = right, on = right.sorted)
+      JoinPath(expr = from, cont = right, on = from.output.head) // FIXME: this is questionable
     }
 
     def dfsInner(
@@ -196,8 +178,8 @@ object LogicNode {
               logicalExpand(child, edge, root, seen)
           }
 
-          JoinFork(
-            to = to,
+          Join(
+            on = to,
             cs = childrenExpr.toVector
           )
       }

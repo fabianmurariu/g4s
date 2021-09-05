@@ -1,8 +1,6 @@
 package com.github.fabianmurariu.g4s.optim
 
 import cats.implicits._
-import alleycats.std.all._
-import cats.effect.Sync
 import cats.effect.kernel.Ref
 import cats.effect.IO
 
@@ -30,9 +28,9 @@ class Group(
         .sequence
         .map(_.flatten)
       _ <- newMembers.foldM(()) { 
-        case (_, egm:EvaluatedGroupMember) => IO.unit // we're done with you
+        case (_, _:EvaluatedGroupMember) => IO.unit // we're done with you
         case (_, ugm:UnEvaluatedGroupMember) =>  // this is for transformation rules
-        IO.delay(println(s"New un-Evaluated Member -> $ugm")) *> memo.doEnqueuePlan(ugm.logic).map(_ => ())
+        memo.doEnqueuePlan(ugm.logic).map(_ => ())
       }
       _ <- equivalentExprs.set(newMembers)
     } yield ()

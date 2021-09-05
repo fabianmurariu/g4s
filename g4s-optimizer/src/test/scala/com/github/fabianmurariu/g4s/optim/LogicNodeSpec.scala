@@ -1,5 +1,7 @@
 package com.github.fabianmurariu.g4s.optim
 
+import DirectedGraph.ops._
+
 class LogicNodeSpec extends munit.FunSuite {
 
   test("parse one hop path from cypher and generate query graph") {
@@ -143,7 +145,7 @@ class LogicNodeSpec extends munit.FunSuite {
 
     val Right(actual) = LogicNode.fromQueryGraph(queryGraph)(Binding("c"))
 
-    val expected = JoinFork(
+    val expected = Join(
       GetNodes(Seq("C"), Some(Binding("c"))),
       Vector(
         Filter(
@@ -181,7 +183,8 @@ class LogicNodeSpec extends munit.FunSuite {
 
     val Right(actual) = LogicNode.fromQueryGraph(queryGraph)(Binding("c"))
 
-    val expected = JoinFork(
+    println(actual)
+    val expected = Join(
       GetNodes(Seq("C"), Some(Binding("c"))),
       Vector(
         JoinPath(
@@ -194,7 +197,7 @@ class LogicNodeSpec extends munit.FunSuite {
             ),
             GetNodes(Seq("C"), Some(Binding("c")))
           ),
-          on = Some(Binding("d"))
+          on = Binding("d")
         ),
         Filter(
           Expand(
