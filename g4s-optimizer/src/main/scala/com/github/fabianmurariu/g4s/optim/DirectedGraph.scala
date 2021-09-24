@@ -24,6 +24,8 @@ trait DirectedGraph[G[_, _]] {
 
   def degree[V, E](g: G[V, E])(v:V): Int =
     outDegree(g)(v) + inDegree(g)(v)
+
+  def vertices[V, E](g: G[V, E]):collection.Set[V]
 }
 
 case class VertexContainer[V, E](
@@ -52,6 +54,9 @@ object MutableGraph {
 
   implicit def directedGraph: DirectedGraph[MutableGraph] =
     new DirectedGraph[MutableGraph] {
+
+      override def vertices[V, E](g: MutableGraph[V,E]): collection.Set[V] =
+        g.map.keySet
 
       override def getEdge[V, E](g:MutableGraph[V, E])(src: V, dst: V): Option[(V, E, V)] = {
        val direct = for {
@@ -90,8 +95,10 @@ object MutableGraph {
       private def insert0[V, E](g: MutableGraph[V, E])(
           v: V
       ): VertexContainer[V, E] = {
-        g.map
-          .getOrElseUpdate(v, emptyContainer(v))
+          g.map.updateWith(v){
+            case Some(container) => Some(container.copy(v = v))
+            case None => Some(emptyContainer(v))
+          }.get
       }
 
       override def insert[V, E](g: MutableGraph[V, E])(

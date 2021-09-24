@@ -12,9 +12,6 @@ import com.github.fabianmurariu.g4s.optim.Binding
 import com.github.fabianmurariu.g4s.optim.UnNamed
 import cats.effect.kernel.MonadCancel
 import cats.effect.unsafe.IORuntime
-import com.github.fabianmurariu.g4s.sparse.grbv2.GrBVector
-import com.github.fabianmurariu.g4s.sparse.grb.GrBBinaryOp
-import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBoolBinaryOps
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 
 /**
@@ -48,7 +45,10 @@ trait Operator { self =>
     */
   def cardinality: Long
 
-  // def cost: F[Long]
+  /**
+    *  the estimated cost of executing the operator
+    * */
+  def cost: Long
 
   private def showInner: List[String] = {
     val sortedText =
@@ -74,7 +74,7 @@ trait Operator { self =>
       s"Nodes[$textBlocks]"
     case em: GetEdgeMatrix =>
       val textBlocks = showInner.mkString(", ")
-      val name = em.name.mkString("[",",","]")
+      val name = em.name.mkString("[", ",", "]")
       s"Edges[$textBlocks, label=$name, transpose=${em.transpose}]"
     case ExpandMul(left, right) =>
       val padding = offset + "  "
@@ -165,7 +165,9 @@ case class RefOperator(logic: LogicMemoRef) extends Operator {
 
   def output: Seq[Name] = logic.output
 
-  def cardinality: Long = -1
+  def cardinality: Long = 1L
+
+  def cost: Long = 1L
 
 }
 
@@ -185,6 +187,8 @@ case class GetNodeMatrix(
 
   def output: Seq[Name] = Seq(binding)
 
+  def cost: Long = 1L
+
 }
 
 case class GetEdgeMatrix(
@@ -202,6 +206,7 @@ case class GetEdgeMatrix(
 
   def output: Seq[Name] = binding.toSeq
 
+  def cost: Long = 1L
 }
 
 case class ExpandMul(
@@ -223,6 +228,7 @@ case class ExpandMul(
 
   def cardinality: Long = frontier.cardinality * edges.cardinality
 
+  def cost: Long = ???
 }
 
 case class FilterMul(
@@ -244,6 +250,7 @@ case class FilterMul(
   // the filter should never output more than the input
   def cardinality: Long = frontier.cardinality
 
+    def cost: Long = ???
 }
 
 case class Diag(op: Operator) extends Operator {
@@ -255,8 +262,8 @@ case class Diag(op: Operator) extends Operator {
           shape <- mat.shape
           (rows, cols) = shape
           _ <- mat.show().map(println)
-          _ <- mat.reduceColumns(BuiltInBinaryOps.boolean.lor, None).use { vec =>
-            mat.assignToDiag(vec)
+          _ <- mat.reduceColumns(BuiltInBinaryOps.boolean.lor, None).use {
+            vec => mat.assignToDiag(vec)
           }
           _ <- mat.show().map(println)
           _ <- cb(MatrixRecord(mat))
@@ -271,10 +278,10 @@ case class Diag(op: Operator) extends Operator {
   // we estimate as 1/10
   def cardinality: Long = op.cardinality / 10
 
-  def cost:Long = ???//FIXME: COST AND CARDINALITY ARE TWO DIFFERENT BEASTS!
-                  //the output from this operation is at least the same as the prev operator
-                  //the cost involves a reduce then then arranging the vector
-                  //on the matrix diag
+  def cost: Long = ??? //FIXME: COST AND CARDINALITY ARE TWO DIFFERENT BEASTS!
+  //the output from this operation is at least the same as the prev operator
+  //the cost involves a reduce then then arranging the vector
+  //on the matrix diag
 
 }
 
@@ -300,6 +307,8 @@ case class MatrixTuples(op: Operator) extends Operator {
   def output: Seq[Name] = ???
 
   def cardinality: Long = ???
+
+  def cost: Long = ???
 
 }
 

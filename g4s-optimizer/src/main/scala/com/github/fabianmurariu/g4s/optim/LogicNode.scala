@@ -90,14 +90,6 @@ case class Join(
 
 }
 
-case class Diag(node: LogicNode) extends ForkNode(ArrayBuffer(node)) {
-
-  override def output: Seq[Name] = node.output
-
-  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
-    Diag(children(0))
-}
-
 case class LogicMemoRef(group: Group)
     extends LogicNode(ArrayBuffer(group.logic)) {
 
@@ -146,7 +138,7 @@ object LogicNode {
       val to = GetNodes(root.labels, Some(root.name))
       val edges = GetEdges(edge.types, t)
 
-      val right = Filter(Expand(Diag(from), edges, true), to)
+      val right = Filter(Expand(from, edges, true), to)
       JoinPath(expr = from, cont = right, on = from.output.head) // FIXME: this is questionable
     }
 

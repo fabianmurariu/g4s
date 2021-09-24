@@ -44,7 +44,7 @@ class OptimSpec extends munit.FunSuite {
   }
 
   test(
-    "Optimize a one hop graph match (a:`fix.A`)-[:`fix.X`]->(c:`fix.C`)<-[:`fix.Y`]-(b:`fix.B`) return c".only
+    "Optimize a one hop graph match (a:`fix.A`)-[:`fix.X`]->(c:`fix.C`)<-[:`fix.Y`]-(b:`fix.B`) return c"
   ) {
 
     val query = "match (a:`fix.A`)-[:`fix.X`]->(c:`fix.C`)<-[:`fix.Y`]-(b:`fix.B`) return c"
