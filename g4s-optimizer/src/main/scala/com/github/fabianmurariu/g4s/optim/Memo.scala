@@ -6,17 +6,20 @@ import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import java.util.concurrent.ConcurrentHashMap
 import cats.effect.kernel.Ref
 import cats.effect.IO
+import scala.collection.immutable.Queue
 
 class Memo(
     val rootPlans: Map[Binding, LogicNode],
-    val stack: Ref[IO, List[Group]],
+    val stack: Ref[IO, Queue[Group]],
     val table: ConcurrentHashMap[String, Group]
 ) {
 
   def pop: IO[Option[Group]] =
     stack.modify {
-      case head :: tail => (tail, Some(head))
-      case Nil          => (Nil, None)
+      _.dequeueOption match {
+        case None               => (Queue.empty, None)
+        case Some((head, rest)) => (rest, Some(head))
+      }
     }
 
   def isDone: IO[Boolean] = stack.modify(list => (list, list.isEmpty))
@@ -28,7 +31,7 @@ class Memo(
         // this is cute because table.put is idempotent
         // so this block can run however many times and it will update the stack exactly once
         table.putIfAbsent(logic.signature, newG)
-        (newG :: s, newG)
+        (s.enqueue(newG), newG)
       }
     } yield g
 
@@ -88,7 +91,10 @@ class Memo(
               optimTo <- optimPhysicalPlan(to.logic.signature)
             } yield op.FilterMul(optimFrom, optimTo)
 
-          case op.FilterMul(from: op.RefOperator, op.Diag(inner:op.RefOperator)) =>
+          case op.FilterMul(
+              from: op.RefOperator,
+              op.Diag(inner: op.RefOperator)
+              ) =>
             for {
               optimFrom <- optimPhysicalPlan(from.logic.signature)
               optimInner <- optimPhysicalPlan(inner.logic.signature)
@@ -111,8 +117,8 @@ class Memo(
 object Memo {
   def apply(
       rootPlans: Map[Binding, LogicNode]
-  ): IO[Memo] = Ref.of[IO, List[Group]](List.empty[Group]).map { stack =>
+  ): IO[Memo] = Ref.of[IO, Queue[Group]](Queue.empty[Group]).map { queue =>
     val table = new ConcurrentHashMap[String, Group]
-    new Memo(rootPlans, stack, table)
+    new Memo(rootPlans, queue, table)
   }
 }

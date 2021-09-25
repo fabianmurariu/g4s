@@ -96,6 +96,11 @@ trait Operator { self =>
   }
 }
 
+sealed trait MatrixOperator extends Operator{
+
+    def shape:(Long, Long)
+}
+
 object Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
@@ -171,14 +176,13 @@ case class RefOperator(logic: LogicMemoRef) extends Operator {
 
 }
 
-sealed trait EdgeMatrix extends Operator
-
 case class GetNodeMatrix(
     binding: Name,
     name: Option[String],
     nodes: BlockingMatrix[Boolean],
-    cardinality: Long // very likely nodes.nvals
-) extends Operator {
+    cardinality: Long, // very likely nodes.nvals
+    shape: (Long, Long)
+) extends MatrixOperator {
 
   def eval(cb: Record => IO[Unit]): IO[Unit] =
     cb(Nodes(nodes))
@@ -196,8 +200,9 @@ case class GetEdgeMatrix(
     name: Option[String],
     edges: BlockingMatrix[Boolean],
     transpose: Boolean,
-    cardinality: Long // very likely edges.nvals
-) extends EdgeMatrix {
+    cardinality: Long, // very likely edges.nvals
+    shape: (Long, Long)
+) extends MatrixOperator {
 
   def eval(cb: Record => IO[Unit]): IO[Unit] =
     cb(Edges(edges))

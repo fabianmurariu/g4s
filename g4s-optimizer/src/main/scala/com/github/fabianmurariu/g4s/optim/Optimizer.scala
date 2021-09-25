@@ -30,6 +30,7 @@ class Optimizer(rules: Vector[Rule]) {
       m.pop.flatMap{
         case None => IO.delay(m)
         case Some(group) =>
+            println(s"POP ${group.logic.signature}")
           group
             .exploreGroup(rules, graph)
           .flatMap(_ => loop(m))

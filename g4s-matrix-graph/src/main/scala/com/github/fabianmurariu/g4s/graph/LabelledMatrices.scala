@@ -1,11 +1,10 @@
 package com.github.fabianmurariu.g4s.graph
 
 import java.util.concurrent.ConcurrentHashMap
-import cats.effect.Concurrent
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters.IteratorHasAsScala
 import cats.effect.Resource
 import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
 import cats.implicits._
@@ -49,7 +48,7 @@ object LabelledMatrices {
         .values()
         .iterator()
         .asScala
-        .toStream
+        .to(Vector)
         .foldLeftM(())((_, mat) => mat.release)
     }
 }

@@ -83,13 +83,15 @@ class LoadEdges extends ImplementationRule {
     IO.defer {
       gm.logic match {
         case GetEdges((tpe: String) :: _, transpose) =>
-          graph.lookupEdges(tpe, transpose).map {
+          graph.lookupEdges(tpe, transpose).flatMap {
             case (mat, card) =>
-              val physical: op.Operator =
-                GetEdgeMatrix(None, Some(tpe), mat, transpose, card)
-              List(
-                EvaluatedGroupMember(gm.logic, physical)
-              )
+              mat.use(_.shape).map { shape =>
+                val physical: op.Operator =
+                  GetEdgeMatrix(None, Some(tpe), mat, transpose, card, shape)
+                List(
+                  EvaluatedGroupMember(gm.logic, physical)
+                )
+              }
           }
       }
     }
@@ -107,18 +109,21 @@ class LoadNodes extends ImplementationRule {
   ): IO[List[GroupMember]] = IO.defer {
     gm.logic match {
       case GetNodes((label :: _), sorted) =>
-        graph.lookupNodes(label).map {
+        graph.lookupNodes(label).flatMap {
           case (mat, card) =>
-            val physical: op.Operator =
-              op.GetNodeMatrix(
+            mat.use(_.shape).map { shape =>
+              val physical = op.GetNodeMatrix(
                 sorted.getOrElse(new UnNamed),
                 Some(label),
                 mat,
-                card
+                card,
+                shape
               )
-            List(
-              EvaluatedGroupMember(gm.logic, physical)
-            )
+              List(
+                EvaluatedGroupMember(gm.logic, physical)
+              )
+            }
+
         }
     }
   }
@@ -128,38 +133,49 @@ class LoadNodes extends ImplementationRule {
 
 }
 
-
 /**
- *  .. (a)-[]->(b)-[]->(c) return b
- *
- * the tree breaks into 2 branches
- * (a)-[]->(b)
- * (c)<-[]-(b)
- *  *
- * depending on direction these need to be joined on b
- * and/or sorted
- *
- * */
+  *  .. (a)-[]->(b)-[]->(c) return b
+  *
+  * the tree breaks into 2 branches
+  * (a)-[]->(b)
+  * (c)<-[]-(b)
+  *  *
+  * depending on direction these need to be joined on b
+  * and/or sorted
+  *
+  * */
 class TreeJoinDiagFilter extends ImplementationRule {
 
-  override def apply(gm: GroupMember, v2: EvaluatorGraph): IO[List[GroupMember]] =
+  override def apply(
+      gm: GroupMember,
+      v2: EvaluatorGraph
+  ): IO[List[GroupMember]] =
     gm.logic match {
-      case Join(on, Vector(left:LogicMemoRef, right:LogicMemoRef, _*)) =>
+      case Join(on, Vector(left: LogicMemoRef, right: LogicMemoRef, _*)) =>
         // diag on left FIXME: this is not complete but it's easy to express now
         // probably requires a transformation rule to generate the binary join trees
         // from the initial list
-        IO.delay{
+        IO.delay {
           (left.plan, right.plan) match {
-            case (Filter(front1:LogicMemoRef, _), Filter(front2:LogicMemoRef, _)) =>
+            case (
+                Filter(front1: LogicMemoRef, _),
+                Filter(front2: LogicMemoRef, _)
+                ) =>
               List(
-                EvaluatedGroupMember(gm.logic,
-                                    op.FilterMul(
-                                      op.RefOperator(front1),
-                                      op.Diag(op.RefOperator(right)))),
-                EvaluatedGroupMember(gm.logic,
-                                    op.FilterMul(
-                                      op.RefOperator(front2),
-                                      op.Diag(op.RefOperator(left))))
+                EvaluatedGroupMember(
+                  gm.logic,
+                  op.FilterMul(
+                    op.RefOperator(front1),
+                    op.Diag(op.RefOperator(right))
+                  )
+                ),
+                EvaluatedGroupMember(
+                  gm.logic,
+                  op.FilterMul(
+                    op.RefOperator(front2),
+                    op.Diag(op.RefOperator(left))
+                  )
+                )
               )
           }
         }
@@ -167,11 +183,10 @@ class TreeJoinDiagFilter extends ImplementationRule {
     }
 
   override def isDefinedAt(gm: GroupMember): Boolean = gm.logic match {
-    case Join(_, Vector(l:LogicMemoRef, r:LogicMemoRef, _*)) =>
+    case Join(_, Vector(l: LogicMemoRef, r: LogicMemoRef, _*)) =>
       r.plan.isInstanceOf[Filter] && l.plan.isInstanceOf[Filter]
     case _ => false
   }
-
 
 }
 

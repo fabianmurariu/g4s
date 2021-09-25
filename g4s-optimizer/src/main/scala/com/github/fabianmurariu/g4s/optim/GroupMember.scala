@@ -24,5 +24,5 @@ case class UnEvaluatedGroupMember(logic: LogicNode) extends GroupMember
 case class EvaluatedGroupMember(logic: LogicNode, plan: Operator)
     extends GroupMember {
 
-  def cost: IO[Long] = IO.delay(plan.cardinality)
+  def cost: Long = plan.cardinality
 }
