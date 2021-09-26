@@ -1,10 +1,7 @@
 package com.github.fabianmurariu.g4s.optim
 
-import cats.effect.IO
 import com.github.fabianmurariu.g4s.optim.MutableGraph
 import com.github.fabianmurariu.g4s.optim.DirectedGraph
-import cats.effect.kernel.MonadCancel
-import cats.effect.std.Queue
 
 sealed trait Label
 // case object AllNodes extends Label
@@ -14,71 +11,71 @@ case class EdgeLabel(v: String) extends Label
 
 trait StatsStore {
 
-  def addNode(label: String): IO[StatsStore]
+  def addNode(label: String): StatsStore
 
   def addTriplet(
       srcLabel: String,
       edgeLabel: String,
       dstLabel: String
-  ): IO[StatsStore]
+  ): StatsStore
 
-  def removeNode(label: String): IO[StatsStore]
+  def removeNode(label: String): StatsStore
 
-  def store: IO[MutableGraph[Label, Long]]
+  def store: MutableGraph[Label, Long]
 
-  def removeEdge(srcLabel: String, edgeLabel: String): IO[StatsStore]
+  def removeEdge(srcLabel: String, edgeLabel: String): StatsStore
 
   /**
     * nodes with [label] / nodesTotal
     * or 1 if label is None
     * */
-  def nodeSel(label: Option[String]): IO[Double]
+  def nodeSel(label: Option[String]): Double
 
   /**
     * edges with [label] / edgesTotal
     * or 1 if label is None
     * */
-  def edgeSel(label: Option[String]): IO[Double]
+  def edgeSel(label: Option[String]): Double
 
   /**
     * all the nodes inserted given
     * the [label]
     * */
-  def nodesTotal(label: Option[String]): IO[Long]
+  def nodesTotal(label: Option[String]): Long
 
   /**
     * all the edges inserted given
     * the [label]
     * */
-  def edgesTotal(label: Option[String]): IO[Long]
+  def edgesTotal(label: Option[String]): Long
 
   /**
     *
     * number of [srcLabel] -[edgeLabel]->
     *
     * */
-  def nodeEdgeOut(srcLabel: String, edgeLabel: String): IO[Long]
+  def nodeEdgeOut(srcLabel: String, edgeLabel: String): Long
 
   /**
     *
     * selectivity of [srcLabel] -[edgeLabel]->
     *
     * */
-  def nodeEdgeOutSel(srcLabel: String, edgeLabel: String): IO[Double]
+  def nodeEdgeOutSel(srcLabel: String, edgeLabel: String): Double
 
   /**
     *
     * number of -[edgeLabel]-> (dstLabel)
     *
     * */
-  def nodeEdgeIn(edgeLabel: String, dstLabel: String): IO[Long]
+  def nodeEdgeIn(edgeLabel: String, dstLabel: String): Long
 
   /**
     *
     * selectivity of -[edgeLabel]-> (dstLabel)
     *
     * */
-  def nodeEdgeInSel(edgeLabel: String, dstLabel: String): IO[Double]
+  def nodeEdgeInSel(edgeLabel: String, dstLabel: String): Double
 }
 
 object StatsStore {
@@ -94,162 +91,150 @@ object StatsStore {
       var edgeCount: Long = 0
   )
 
-  def apply(): IO[StatsStore] = {
+  def apply(): StatsStore = {
 
     def increment(i: Option[Long]): Option[Long] =
       i.map(_ + 1L).orElse(Some(1L))
 
-    val q = for {
-      sync <- Queue.bounded[IO, StatsData](1)
-      _ <- sync.offer(
-        StatsData(
-          MutableGraph.empty[Label, Long],
-          mutable.HashMap.empty,
-          mutable.HashMap.empty
-        )
+    new StatsStore { self =>
+
+      val sd = StatsData(
+        MutableGraph.empty[Label, Long],
+        mutable.HashMap.empty,
+        mutable.HashMap.empty
       )
-    } yield sync
+      override def store: MutableGraph[Label, Long] = use { sd =>
+        sd.linkCounts
+      }
 
-    q.map { sync =>
-      new StatsStore { self =>
+      def use[B](fg: StatsData => B): B = fg(sd)
 
-        override def store: IO[MutableGraph[Label, Long]] = use { sd =>
-          sd.linkCounts
+      def useSelf[B](fg: StatsData => B): StatsStore = {
+        use(fg)
+        self
+      }
+
+      override def addNode(label: String): StatsStore =
+        useSelf { sd =>
+          sd.nodeCount += 1L
+          sd.nodes.updateWith(label)(increment)
         }
 
-        def useIO[B](fg: StatsData => IO[B]): IO[B] =
-          MonadCancel[IO].bracket(sync.take)(fg)(sync.offer _)
+      override def addTriplet(
+          srcLabel: String,
+          edgeLabel: String,
+          dstLabel: String
+      ): StatsStore =
+        useSelf { sd =>
+          sd.edgeCount += 1L
+          val sl = NodeLabel(srcLabel)
+          val el = EdgeLabel(edgeLabel)
+          val dl = NodeLabel(dstLabel)
 
-        def use[B](fg: StatsData => B): IO[B] =
-          useIO({ graph => IO.delay(fg(graph)) })
+          sd.edges.updateWith(edgeLabel)(increment)
 
-        def useSelf[B](fg: StatsData => B): IO[StatsStore] =
-          use(fg).map(_ => self)
-
-        override def addNode(label: String): IO[StatsStore] =
-          useSelf { sd =>
-            sd.nodeCount += 1L
-            sd.nodes.updateWith(label)(increment)
+          val countIn = sd.linkCounts.getEdge(sl, el) match {
+            case Some((_, v, _)) => v + 1L
+            case None            => 1L
           }
 
-        override def addTriplet(
-            srcLabel: String,
-            edgeLabel: String,
-            dstLabel: String
-        ): IO[StatsStore] =
-          useSelf { sd =>
-            sd.edgeCount += 1L
-            val sl = NodeLabel(srcLabel)
-            val el = EdgeLabel(edgeLabel)
-            val dl = NodeLabel(dstLabel)
-
-            sd.edges.updateWith(edgeLabel)(increment)
-
-            val countIn = sd.linkCounts.getEdge(sl, el) match {
-              case Some((_, v, _)) => v + 1L
-              case None            => 1L
-            }
-
-            val countOut = sd.linkCounts.getEdge(el, dl) match {
-              case Some((_, v, _)) => v + 1L
-              case None            => 1L
-            }
-
-            sd.linkCounts
-              .insert(sl)
-              .insert(el)
-              .insert(dl)
-              .edge(sl, countIn, el)
-              .edge(el, countOut, dl)
+          val countOut = sd.linkCounts.getEdge(el, dl) match {
+            case Some((_, v, _)) => v + 1L
+            case None            => 1L
           }
 
-        override def removeNode(label: String): IO[StatsStore] = ???
-
-        override def removeEdge(
-            srcLabel: String,
-            edgeLabel: String
-        ): IO[StatsStore] = ???
-
-        override def nodeSel(label: Option[String]): IO[Double] =
-          for {
-            n1 <- nodesTotal(label)
-            nTotal <- nodesTotal(None)
-          } yield (n1.toDouble / nTotal.toDouble)
-
-        override def edgeSel(label: Option[String]): IO[Double] =
-          for {
-            n1 <- edgesTotal(label)
-            nTotal <- edgesTotal(None)
-          } yield (n1.toDouble / nTotal.toDouble)
-
-        override def nodesTotal(label: Option[String] = None): IO[Long] =
-          use { sd =>
-            label match {
-              case Some(nodeLabel) =>
-                sd.nodes.get(nodeLabel).getOrElse(0L)
-              case None =>
-                sd.nodeCount
-            }
-          }
-
-        override def edgesTotal(label: Option[String]): IO[Long] =
-          use { sd =>
-            label match {
-              case Some(edgeLabel) =>
-                sd.edges.get(edgeLabel).getOrElse(0L)
-              case None =>
-                sd.edgeCount
-            }
-          }
-
-        override def nodeEdgeOut(
-            srcLabel: String,
-            edgeLabel: String
-        ): IO[Long] = use { sd =>
           sd.linkCounts
-            .getEdge(NodeLabel(srcLabel), EdgeLabel(edgeLabel))
-            .map(_._2) // get the count
-            .getOrElse(0L)
+            .insert(sl)
+            .insert(el)
+            .insert(dl)
+            .edge(sl, countIn, el)
+            .edge(el, countOut, dl)
         }
 
-        override def nodeEdgeOutSel(
-            srcLabel: String,
-            edgeLabel: String
-        ): IO[Double] =
-          for {
-            totalEdge <- nodeEdgeOut(srcLabel, edgeLabel)
-            total <- use { st =>
-              st.linkCounts.out(NodeLabel(srcLabel)).foldLeft(0L) {
-                case (sum, e) => sum + e._2
-              }
-            }
-          } yield totalEdge.toDouble / total.toDouble
+      override def removeNode(label: String): StatsStore = ???
 
-        override def nodeEdgeInSel(
-            edgeLabel: String,
-            dstLabel: String
-        ): IO[Double] =
-          for {
-            totalEdge <- nodeEdgeIn(edgeLabel, dstLabel)
-            total <- use(_.linkCounts.in(NodeLabel(dstLabel)).foldLeft(0L) {
-                case (sum, e) => sum + e._2
-              })
-          } yield totalEdge.toDouble / total.toDouble
+      override def removeEdge(
+          srcLabel: String,
+          edgeLabel: String
+      ): StatsStore = ???
 
-        override def nodeEdgeIn(
-            edgeLabel: String,
-            dstLabel: String
-        ): IO[Long] = use { sd =>
-          sd.linkCounts
-            .getEdge(EdgeLabel(edgeLabel), NodeLabel(dstLabel))
-            .map(_._2) // get the count
-            .getOrElse(0L)
+      override def nodeSel(label: Option[String]): Double = {
+        val n1 = nodesTotal(label)
+        val nTotal = nodesTotal(None)
+        (n1.toDouble / nTotal.toDouble)
+      }
 
+      override def edgeSel(label: Option[String]): Double = {
+        val n1 = edgesTotal(label)
+        val nTotal = edgesTotal(None)
+        (n1.toDouble / nTotal.toDouble)
+      }
+      override def nodesTotal(label: Option[String] = None): Long =
+        use { sd =>
+          label match {
+            case Some(nodeLabel) =>
+              sd.nodes.get(nodeLabel).getOrElse(0L)
+            case None =>
+              sd.nodeCount
+          }
         }
+
+      override def edgesTotal(label: Option[String]): Long =
+        use { sd =>
+          label match {
+            case Some(edgeLabel) =>
+              sd.edges.get(edgeLabel).getOrElse(0L)
+            case None =>
+              sd.edgeCount
+          }
+        }
+
+      override def nodeEdgeOut(
+          srcLabel: String,
+          edgeLabel: String
+      ): Long = use { sd =>
+        sd.linkCounts
+          .getEdge(NodeLabel(srcLabel), EdgeLabel(edgeLabel))
+          .map(_._2) // get the count
+          .getOrElse(0L)
+      }
+
+      override def nodeEdgeOutSel(
+          srcLabel: String,
+          edgeLabel: String
+      ): Double = {
+        val totalEdge = nodeEdgeOut(srcLabel, edgeLabel)
+        val total = use { st =>
+          st.linkCounts.out(NodeLabel(srcLabel)).foldLeft(0L) {
+            case (sum, e) => sum + e._2
+          }
+        }
+        totalEdge.toDouble / total.toDouble
+      }
+
+      override def nodeEdgeInSel(
+          edgeLabel: String,
+          dstLabel: String
+      ): Double = {
+        val totalEdge = nodeEdgeIn(edgeLabel, dstLabel)
+        val total = use(_.linkCounts.in(NodeLabel(dstLabel)).foldLeft(0L) {
+          case (sum, e) => sum + e._2
+        })
+        totalEdge.toDouble / total.toDouble
+      }
+
+      override def nodeEdgeIn(
+          edgeLabel: String,
+          dstLabel: String
+      ): Long = use { sd =>
+        sd.linkCounts
+          .getEdge(EdgeLabel(edgeLabel), NodeLabel(dstLabel))
+          .map(_._2) // get the count
+          .getOrElse(0L)
 
       }
-    }
 
+    }
   }
 
 }

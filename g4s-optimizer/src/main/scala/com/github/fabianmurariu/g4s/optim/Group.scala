@@ -4,6 +4,35 @@ import cats.implicits._
 import cats.effect.kernel.Ref
 import cats.effect.IO
 
+case class GroupV2(
+    logic: LogicNode,
+    equivalentExprs: Vector[GroupMember],
+    optMember: Option[EvaluatedGroupMember] = None
+)
+
+object GroupV2 {
+    def apply(logic:LogicNode):GroupV2 =
+        GroupV2(logic, Vector(UnEvaluatedGroupMember(logic)))
+
+  def appendMember(g: GroupV2)(member: GroupMember): GroupV2 =
+    g.copy(equivalentExprs = member +: g.equivalentExprs)
+
+  def optim(g: GroupV2): GroupV2 =
+    g.optMember match {
+      case Some(_) => g
+      case None =>
+        val best = calculateAndSetOptimGroupMember(g)
+        g.copy(optMember = Some(best))
+    }
+
+  private def calculateAndSetOptimGroupMember(
+      g: GroupV2
+  ): EvaluatedGroupMember =
+    g.equivalentExprs
+      .map { case egm: EvaluatedGroupMember => egm }
+      .minBy(_.cost)
+}
+
 class Group(
     val memo: Memo,
     val logic: LogicNode,
@@ -53,7 +82,9 @@ class Group(
 
   private def calculateAndSetOptimGroupMember: IO[EvaluatedGroupMember] =
     IO.defer {
-        equivalentExprs.get.map{ _.map{case egm:EvaluatedGroupMember => egm}.minBy(_.cost) }
+        equivalentExprs.get.map {
+          _.map { case egm: EvaluatedGroupMember => egm }.minBy(_.cost)
+        }
       }
       .flatMap {
         case best => optMember.updateAndGet(_ => Some(best)).map(_.get)

@@ -25,8 +25,6 @@ trait TransformationRule extends Rule
 
 import com.github.fabianmurariu.g4s.optim.{impls => op}
 
-import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
-
 class Filter2MxM extends ImplementationRule {
 
   override def apply(
@@ -87,7 +85,7 @@ class LoadEdges extends ImplementationRule {
             case (mat, card) =>
               mat.use(_.shape).map { shape =>
                 val physical: op.Operator =
-                  GetEdgeMatrix(None, Some(tpe), mat, transpose, card, shape)
+                  GetEdgeMatrix(None, Some(tpe), transpose, card)
                 List(
                   EvaluatedGroupMember(gm.logic, physical)
                 )
@@ -115,9 +113,7 @@ class LoadNodes extends ImplementationRule {
               val physical = op.GetNodeMatrix(
                 sorted.getOrElse(new UnNamed),
                 Some(label),
-                mat,
-                card,
-                shape
+                card
               )
               List(
                 EvaluatedGroupMember(gm.logic, physical)
@@ -207,4 +203,6 @@ trait EvaluatorGraph {
 
   def lookupNodes(tpe: String): IO[(BlockingMatrix[Boolean], Long)] =
     this.lookupNodes(Some(tpe))
+
+  def statsStore: StatsStore
 }

@@ -32,6 +32,8 @@ sealed abstract class ForkNode(
 ) extends LogicNode(cs) {
 
   def rewire(children: Vector[LogicMemoRef]): LogicNode
+
+  def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode
 }
 
 case class GetNodes(label: Seq[String], sorted: Option[Name] = None)
@@ -53,6 +55,8 @@ case class Expand(from: LogicNode, to: LogicNode, transposed: Boolean)
   override def rewire(children: Vector[LogicMemoRef]): LogicNode =
     Expand(children(0), children(1), transposed)
 
+  override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
+    Expand(children(0), children(1), transposed)
   def output: Seq[Name] = to.output
 }
 
@@ -62,6 +66,9 @@ case class Filter(frontier: LogicNode, filter: LogicNode)
   def output: Seq[Name] = filter.output
 
   override def rewire(children: Vector[LogicMemoRef]): LogicNode =
+    Filter(children(0), children(1))
+
+  override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
     Filter(children(0), children(1))
 }
 
@@ -75,6 +82,9 @@ case class JoinPath(
 
   override def rewire(children: Vector[LogicMemoRef]): LogicNode =
     JoinPath(children(0), children(1), on)
+
+  override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
+    JoinPath(children(0), children(1), on)
 }
 
 // join two branches into a top node
@@ -86,8 +96,19 @@ case class Join(
   override def rewire(children: Vector[LogicMemoRef]): LogicNode =
     Join(on, children)
 
+  override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
+    Join(on, children)
+
   override def output: Seq[Name] = children.flatMap(_.output).toSeq
 
+}
+
+case class LogicMemoRefV2(logic: LogicNode)
+    extends LogicNode(ArrayBuffer(logic)) {
+
+  override def output: Seq[Name] = plan.output
+
+  def plan: LogicNode = children.next()
 }
 
 case class LogicMemoRef(group: Group)
@@ -139,7 +160,11 @@ object LogicNode {
       val edges = GetEdges(edge.types, t)
 
       val right = Filter(Expand(from, edges, true), to)
-      JoinPath(expr = from, cont = right, on = from.output.head) // FIXME: this is questionable
+      JoinPath(
+        expr = from,
+        cont = right,
+        on = from.output.head
+      ) // FIXME: this is questionable
     }
 
     def dfsInner(

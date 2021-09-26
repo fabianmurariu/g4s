@@ -16,6 +16,14 @@ sealed abstract class GroupMember { self =>
         .map(_.flatten)
   }
 
+  def exploreMemberV2(
+      rules: Vector[rules2.Rule],
+      store: StatsStore
+  ): Vector[GroupMember] = {
+      rules
+        .flatMap(rule => rule.eval(self, store))
+  }
+
   def logic: LogicNode
 
 }

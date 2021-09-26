@@ -13,6 +13,7 @@ import com.github.fabianmurariu.g4s.optim.UnNamed
 import cats.effect.kernel.MonadCancel
 import cats.effect.unsafe.IORuntime
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
+import com.github.fabianmurariu.g4s.optim.EvaluatorGraph
 
 /**
   * base class for push operators
@@ -20,7 +21,9 @@ import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
   */
 trait Operator { self =>
 
-  def eval(cb: Record => IO[Unit]): IO[Unit]
+  def eval(eg: EvaluatorGraph)(cb: Record => IO[Unit])(
+      implicit G: GRB
+  ): IO[Unit]
 
   /**
     * The binding on which the operator output is sorted
@@ -96,22 +99,19 @@ trait Operator { self =>
   }
 }
 
-sealed trait MatrixOperator extends Operator{
-
-    def shape:(Long, Long)
-}
+sealed trait MatrixOperator extends Operator
 
 object Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
 
-  def commonMxM(left: Operator, right: Operator)(
+  def commonMxM(eg: EvaluatorGraph)(left: Operator, right: Operator)(
       cb: Record => IO[Unit]
   )(implicit G: GRB): IO[Unit] = {
-    left.eval {
+    left.eval(eg) {
       case left: MatrixRecord @unchecked =>
-        right.eval {
+        right.eval(eg) {
           case right: MatrixRecord @unchecked =>
             MonadCancel[IO].bracket(IO.delay(right.mat)) { edges =>
               MxM[IO]
@@ -130,7 +130,7 @@ object Operator {
               .flatMap(mat => cb(MatrixRecord(mat)))
         }
       case left: Nodes =>
-        right.eval {
+        right.eval(eg) {
           case right: MatrixRecord =>
             left.mat.use { nodes =>
               MxM[IO]
@@ -164,7 +164,9 @@ object Operator {
   * */
 case class RefOperator(logic: LogicMemoRef) extends Operator {
 
-  def eval(cb: Record => IO[Unit]): IO[Unit] = IO.unit
+  def eval(eg: EvaluatorGraph)(cb: Record => IO[Unit])(
+      implicit G: GRB
+  ): IO[Unit] = IO.unit
 
   def sorted: Option[Name] = None
 
@@ -179,13 +181,16 @@ case class RefOperator(logic: LogicMemoRef) extends Operator {
 case class GetNodeMatrix(
     binding: Name,
     name: Option[String],
-    nodes: BlockingMatrix[Boolean],
-    cardinality: Long, // very likely nodes.nvals
-    shape: (Long, Long)
+    cardinality: Long
 ) extends MatrixOperator {
 
-  def eval(cb: Record => IO[Unit]): IO[Unit] =
-    cb(Nodes(nodes))
+  def eval(
+      eg: EvaluatorGraph
+  )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] =
+    eg.lookupNodes(name).flatMap {
+      case (nodes, _) =>
+        cb(Nodes(nodes))
+    }
 
   def sorted: Option[Name] = Some(binding)
 
@@ -198,15 +203,17 @@ case class GetNodeMatrix(
 case class GetEdgeMatrix(
     binding: Option[Name],
     name: Option[String],
-    edges: BlockingMatrix[Boolean],
     transpose: Boolean,
-    cardinality: Long, // very likely edges.nvals
-    shape: (Long, Long)
+    cardinality: Long
 ) extends MatrixOperator {
 
-  def eval(cb: Record => IO[Unit]): IO[Unit] =
-    cb(Edges(edges))
-
+  def eval(
+      eg: EvaluatorGraph
+  )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] =
+    eg.lookupEdges(name, transpose).flatMap {
+      case (edges, _) =>
+        cb(Nodes(edges))
+    }
   def sorted: Option[Name] = None
 
   def output: Seq[Name] = binding.toSeq
@@ -217,14 +224,15 @@ case class GetEdgeMatrix(
 case class ExpandMul(
     frontier: Operator,
     edges: Operator
-)(implicit G: GRB)
-    extends Operator {
+) extends Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
-    Expand.staticAnyPairSemiring
+    Expand.staticAnyPairSemiring //FIXME get rid of this
 
-  def eval(cb: Record => IO[Unit]): IO[Unit] = {
-    Operator.commonMxM(frontier, edges)(cb)
+  def eval(
+      eg: EvaluatorGraph
+  )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] = {
+    Operator.commonMxM(eg)(frontier, edges)(cb)
   }
 
   def sorted: Option[Name] = frontier.sorted
@@ -239,14 +247,15 @@ case class ExpandMul(
 case class FilterMul(
     frontier: Operator,
     filter: Operator
-)(implicit G: GRB)
-    extends Operator {
+) extends Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
 
-  def eval(cb: Record => IO[Unit]): IO[Unit] = {
-    Operator.commonMxM(frontier, filter)(cb)
+  def eval(
+      eg: EvaluatorGraph
+  )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] = {
+    Operator.commonMxM(eg)(frontier, filter)(cb)
   }
 
   def sorted: Option[Name] = frontier.sorted
@@ -255,13 +264,15 @@ case class FilterMul(
   // the filter should never output more than the input
   def cardinality: Long = frontier.cardinality
 
-    def cost: Long = ???
+  def cost: Long = ???
 }
 
 case class Diag(op: Operator) extends Operator {
 
-  def eval(cb: Record => IO[Unit]): IO[Unit] =
-    op.eval {
+  def eval(
+      eg: EvaluatorGraph
+  )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] =
+    op.eval(eg) {
       case MatrixRecord(mat) =>
         for {
           shape <- mat.shape
@@ -295,8 +306,10 @@ case class MatrixTuples(op: Operator) extends Operator {
 
   import scala.collection.mutable
 
-  def eval(cb: Record => IO[Unit]): IO[Unit] = {
-    op.eval {
+  def eval(
+      eg: EvaluatorGraph
+  )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] = {
+    op.eval(eg) {
       case rec: MatrixRecord =>
         for {
           data <- rec.mat.extract
