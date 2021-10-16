@@ -1,12 +1,8 @@
 package com.github.fabianmurariu.g4s.graph
 
 import cats.implicits._
-import com.github.fabianmurariu.g4s.sparse.grb.{
-  BuiltInBinaryOps,
-  GRB,
-  GrBSemiring
-}
-import com.github.fabianmurariu.g4s.sparse.grbv2.{GrBMatrix, MxM, Diag}
+import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
+import com.github.fabianmurariu.g4s.sparse.grb._
 
 import scala.reflect.runtime.universe.{
   Traverser => _,
@@ -14,7 +10,6 @@ import scala.reflect.runtime.universe.{
   Select => _,
   _
 }
-import fs2.Chunk
 import scala.reflect.ClassTag
 import com.github.fabianmurariu.g4s.sparse.grb.GrBInvalidIndex
 import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
@@ -24,21 +19,23 @@ import cats.effect.IO
 import cats.effect.kernel.Ref
 import cats.effect.kernel.MonadCancel
 import cats.effect.kernel.Resource
+import cats.effect.std.Queue
+import com.github.fabianmurariu.g4s.optim.StatsStore
 
 /**
   * Concurrent graph implementation
   * does not do transactions
   */
-class ConcurrentDirectedGraph[V:ClassTag, E](
+class ConcurrentDirectedGraph[V: ClassTag, E](
     nodes: BlockingMatrix[Boolean],
     edges: BlockingMatrix[Boolean],
     edgesTranspose: BlockingMatrix[Boolean],
     edgeTypes: LabelledMatrices,
     edgeTypesTranspose: LabelledMatrices,
     nodeLabels: LabelledMatrices,
-    semiRing: GrBSemiring[Boolean, Boolean, Boolean],
-    ds: DataStore[V, E]
-)(implicit val G: GRB)
+    ds: DataStore[V, E],
+    store: Queue[IO, StatsStore]
+)
     extends EvaluatorGraph {
 
   self =>
@@ -53,6 +50,8 @@ class ConcurrentDirectedGraph[V:ClassTag, E](
   case class Return2(ret1: Array[Long], ret2: Array[Long]) extends IdScan
   case class ReturnN(ret: Seq[ArrayBuffer[Long]]) extends IdScan
 
+  override def withStats[B](f: StatsStore => IO[B]): IO[B] =
+    MonadCancel[IO].bracket(store.take)(f)(store.offer)
   override def lookupEdges(
       tpe: Option[String],
       transpose: Boolean
@@ -78,114 +77,6 @@ class ConcurrentDirectedGraph[V:ClassTag, E](
       mat <- tpe.map(nodeLabels.getOrCreate(_)).getOrElse(IO.delay(nodes))
       card <- mat.use(_.nvals)
     } yield (mat, card)
-  }
-
-  // def joinResults(a: PlanOutput, b: PlanOutput): IO[PlanOutput] = (a, b) match {
-  //   case (Releasable(aMat), Releasable(bMat)) =>
-  //     for {
-  //       tplsA <- GrBTuples.fromGrBExtract(aMat.extract)
-  //       tplsB <- GrBTuples.fromGrBExtract(bMat.extract)
-  //       _ <- F.delay {
-  //         println(tplsA.show)
-  //         println(tplsB.show)
-  //       }
-  //       out <- F.delay {
-  //         GrBTuples.rowJoinOnBinarySearch(tplsA.asRows, 1, tplsB)
-  //       }
-  //     } yield IdTable(out)
-  // }
-
-  // def matMul(a: PlanOutput, b: PlanOutput): IO[PlanOutput] = (a, b) match {
-  //   case (Releasable(from), Releasable(to)) =>
-  //     F.bracket(IO.delay(from)) { from => MxM[F].mxm(to)(from, to)(semiRing) }(
-  //         _.release
-  //       )
-  //       .map(Releasable)
-  //   case (UnReleasable(fromBM), UnReleasable(toBM)) =>
-  //     fromBM.use { from =>
-  //       toBM.use { to =>
-  //         for {
-  //           shape <- to.shape
-  //           (rows, cols) = shape
-  //           out <- GrBMatrix.unsafe[Boolean](rows, cols)
-  //           output <- MxM[F].mxm(out)(from, to)(semiRing)
-  //         } yield Releasable(output)
-  //       }
-  //     }
-  //   case (UnReleasable(fromBM), Releasable(to)) =>
-  //     fromBM.use { from => MxM[F].mxm(to)(from, to)(semiRing) }.map(Releasable)
-  //   case (Releasable(from), UnReleasable(toBM)) =>
-  //     toBM.use { to => MxM[F].mxm(from)(from, to)(semiRing) }.map(Releasable)
-  // }
-
-  def grbEval(
-      output: GrBMatrix[IO, Boolean],
-      from: GrBMatrix[IO, Boolean],
-      edge: GrBMatrix[IO, Boolean],
-      to: GrBMatrix[IO, Boolean]
-  ): IO[GrBMatrix[IO, Boolean]] = {
-    MxM[IO]
-      .mxm(output)(from, edge)(semiRing, None, None, None) >>= {
-      res: GrBMatrix[IO, Boolean] =>
-        MxM[IO].mxm(res)(res, to)(semiRing, None, None, None)
-    }
-  }
-
-  def evalAlgebra(
-      fromPM: PlanOutput,
-      edgeBM: BlockingMatrix[Boolean],
-      toPM: PlanOutput
-  ): IO[Releasable] =
-    (fromPM, toPM) match {
-      case (Releasable(from), Releasable(to)) =>
-        edgeBM
-          .use { edge =>
-            MonadCancel[IO].bracket(IO.pure(to)) {
-              grbEval(from, from, edge, _)
-            }(_.release)
-          }
-          .map(Releasable)
-      case (UnReleasable(fromBM), UnReleasable(toBM)) =>
-        edgeBM.use { edge =>
-          fromBM.use { from =>
-            toBM.use { to =>
-              for {
-                shape <- to.shape
-                (rows, cols) = shape
-                out <- GrBMatrix.unsafe[IO, Boolean](rows, cols)
-                output <- grbEval(out, from, edge, to)
-              } yield Releasable(output)
-            }
-          }
-        }
-      case (UnReleasable(fromBM), Releasable(to)) =>
-        edgeBM
-          .use { edge => fromBM.use { from => grbEval(to, from, edge, to) } }
-          .map(Releasable)
-      case (Releasable(from), UnReleasable(toBM)) =>
-        edgeBM
-          .use { edge => toBM.use { to => grbEval(from, from, edge, to) } }
-          .map(Releasable)
-    }
-
-  /**
-    * make an expansion matrix into a filter matrix
-    * */
-  def expandToFilter(
-      expand: PlanOutput
-  ): IO[GrBMatrix[IO, Boolean]] = {
-    MonadCancel[IO].bracket(IO.delay(expand)) {
-      case Releasable(m) =>
-        for {
-          s <- m.shape
-          (rows, cols) = s
-          filter <- GrBMatrix.unsafe[IO, Boolean](rows, cols)
-          _ <- m.reduceColumns(BuiltInBinaryOps.boolean.any).use { v =>
-            Diag[IO].diag(filter)(v)
-          }
-        } yield filter
-
-    } { case Releasable(m) => m.release }
   }
 
   /**
@@ -218,13 +109,19 @@ class ConcurrentDirectedGraph[V:ClassTag, E](
   def insertVertex[T <: V](v: T)(implicit tt: TypeTag[T]): IO[Long] = {
     // persist on the DataStore
     // possibly resize?
-    for {
+    val  tpe = tt.tpe.toString
+
+    val doWork = for {
       id <- ds.persistV(v)
-      tpe = tt.tpe.toString
       nodeTpeMat <- nodeLabels.getOrCreate(tpe)
       _ <- nodeTpeMat.use(update(id, id))
       _ <- nodes.use(update(id, id))
     } yield id
+
+    val updateStats = withStats(store => IO(store.addNode(tpe))).start
+
+    
+    doWork <* updateStats
   }
 
   /**
@@ -245,26 +142,17 @@ class ConcurrentDirectedGraph[V:ClassTag, E](
       implicit tt: TypeTag[T]
   ): IO[Unit] = {
     val tpe = tt.tpe.toString
-    edges.use(update(src, dst)) *> // update edges
+    val doWork = edges.use(update(src, dst)) *> // update edges
       edgesTranspose.use(update(dst, src)) *> // update edges transpose
       (edgeTypes.getOrCreate(tpe) >>= (_.use(update(src, dst)))) *> // update edges for type
       (edgeTypesTranspose.getOrCreate(tpe) >>= (_.use(update(dst, src)))) *> // update edges for type
       ds.persistE(src, dst, e) // write the edge to the datastore
+
+      val stats = withStats(stats => IO(stats.addEdge(tpe))).start
+      doWork <&  stats
   }
 
-  /**
-    *
-    * Scan over a blocking matrix and return nodes
-    * @param m
-    */
-  def scanNodes(m: BlockingMatrix[Boolean]): fs2.Stream[IO, V] = {
-    m.toStream().flatMap {
-      case (_, js, _) =>
-        fs2.Stream
-          .eval(ds.getVs(js))
-          .flatMap(arr => fs2.Stream.chunk(Chunk.array(arr)))
-    }
-  }
+  
 }
 
 object ConcurrentDirectedGraph {
@@ -281,10 +169,10 @@ object ConcurrentDirectedGraph {
       edgeTypesTranspose <- LabelledMatrices(size)
       nodeLabels <- LabelledMatrices(size)
       ds <- Resource.eval(DataStore.default[V, E])
-      semiRing <- GrBSemiring[IO, Boolean, Boolean, Boolean](
-        BuiltInBinaryOps.boolean.any,
-        BuiltInBinaryOps.boolean.pair,
-        false
+      stats <- Resource.eval(
+        Queue
+          .bounded[IO, StatsStore](1)
+          .flatMap(q => q.offer(StatsStore()).map(_ => q))
       )
     } yield new ConcurrentDirectedGraph(
       nodes,
@@ -293,8 +181,8 @@ object ConcurrentDirectedGraph {
       edgeTypes,
       edgeTypesTranspose,
       nodeLabels,
-      semiRing,
-      ds
+      ds,
+      stats
     )
 
 }

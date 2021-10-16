@@ -21,7 +21,9 @@ sealed abstract class GroupMember { self =>
       store: StatsStore
   ): Vector[GroupMember] = {
       rules
-        .flatMap(rule => rule.eval(self, store))
+        .flatMap{rule => 
+          rule.eval(self, store)
+        }
   }
 
   def logic: LogicNode

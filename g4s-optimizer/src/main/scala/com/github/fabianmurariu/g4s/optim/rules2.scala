@@ -17,6 +17,34 @@ object rules2 {
   trait ImplementationRule extends Rule
   trait TransformationRule extends Rule
 
+  class FilterExpandComutative extends ImplementationRule {
+
+    override def apply(gm: GroupMember, v2: StatsStore): List[GroupMember] =
+      gm.logic match {
+        case Filter(
+            LogicMemoRefV2(
+              Expand(left: LogicMemoRefV2, right: LogicMemoRefV2, transpose)
+            ),
+            filter: LogicMemoRefV2
+            ) =>
+          List(
+            UnEvaluatedGroupMember(
+              Expand(left, Filter(right, filter), transpose)
+            )
+          )
+      }
+
+    override def isDefinedAt(gm: GroupMember): Boolean = gm.logic match {
+      case Filter(
+          LogicMemoRefV2(Expand(_: LogicMemoRefV2, _: LogicMemoRefV2, _)),
+          _: LogicMemoRefV2
+          ) =>
+        true
+      case _ => false
+    }
+
+  }
+
   import com.github.fabianmurariu.g4s.optim.{impls => op}
 
   class Filter2MxM extends ImplementationRule {
@@ -26,11 +54,26 @@ object rules2 {
         stats: StatsStore
     ): List[GroupMember] = {
       gm.logic match {
-        case Filter(frontier: LogicMemoRef, filter: LogicMemoRef) =>
+        case Filter(
+            frontier: LogicMemoRefV2,
+            filter @ LogicMemoRefV2(n: GetNodes)
+            ) =>
+          val sel = stats.nodeSel(n.label.headOption)
           val physical: op.Operator =
             op.FilterMul(
               op.RefOperator(frontier),
-              op.RefOperator(filter)
+              op.RefOperator(filter),
+              sel
+            )
+
+          val newGM: GroupMember = EvaluatedGroupMember(gm.logic, physical)
+          List(newGM)
+        case Filter(frontier: LogicMemoRefV2, filter: LogicMemoRefV2) =>
+          val physical: op.Operator =
+            op.FilterMul(
+              op.RefOperator(frontier),
+              op.RefOperator(filter),
+              1.0d
             )
 
           val newGM: GroupMember = EvaluatedGroupMember(gm.logic, physical)
@@ -50,7 +93,19 @@ object rules2 {
         stats: StatsStore
     ): List[GroupMember] = {
       gm.logic match {
-        case Expand(from: LogicMemoRef, to: LogicMemoRef, _) =>
+        case Expand(
+            from: LogicMemoRefV2,
+            to @ LogicMemoRefV2(e: GetEdges),
+            _
+            ) =>
+          val sel = stats.edgeSel(e.tpe.headOption)
+
+          val physical: op.Operator =
+            op.ExpandMul(op.RefOperator(from), op.RefOperator(to), sel)
+
+          val newGM = EvaluatedGroupMember(gm.logic, physical)
+          List(newGM)
+        case Expand(from: LogicMemoRefV2, to: LogicMemoRefV2, _) =>
           val physical: op.Operator =
             op.ExpandMul(op.RefOperator(from), op.RefOperator(to))
 
@@ -100,7 +155,7 @@ object rules2 {
           val physical = op.GetNodeMatrix(
             sorted.getOrElse(new UnNamed),
             Some(label),
-            card,
+            card
           )
           List(
             EvaluatedGroupMember(gm.logic, physical)
@@ -132,28 +187,33 @@ object rules2 {
         v2: StatsStore
     ): List[GroupMember] =
       gm.logic match {
-        case Join(on, Vector(left: LogicMemoRef, right: LogicMemoRef, _*)) =>
+        case Join(
+            on,
+            Vector(left: LogicMemoRefV2, right: LogicMemoRefV2, _*)
+            ) =>
           // diag on left FIXME: this is not complete but it's easy to express now
           // probably requires a transformation rule to generate the binary join trees
           // from the initial list
           (left.plan, right.plan) match {
             case (
-                Filter(front1: LogicMemoRef, _),
-                Filter(front2: LogicMemoRef, _)
+                Filter(front1: LogicMemoRefV2, _),
+                Filter(front2: LogicMemoRefV2, _)
                 ) =>
               List(
                 EvaluatedGroupMember(
                   gm.logic,
                   op.FilterMul(
                     op.RefOperator(front1),
-                    op.Diag(op.RefOperator(right))
+                    op.Diag(op.RefOperator(right)),
+                    1.0d // we can probably do better than this
                   )
                 ),
                 EvaluatedGroupMember(
                   gm.logic,
                   op.FilterMul(
                     op.RefOperator(front2),
-                    op.Diag(op.RefOperator(left))
+                    op.Diag(op.RefOperator(left)),
+                    1.0d // we can probably do better than this
                   )
                 )
               )
@@ -162,7 +222,7 @@ object rules2 {
       }
 
     override def isDefinedAt(gm: GroupMember): Boolean = gm.logic match {
-      case Join(_, Vector(l: LogicMemoRef, r: LogicMemoRef, _*)) =>
+      case Join(_, Vector(l: LogicMemoRefV2, r: LogicMemoRefV2, _*)) =>
         r.plan.isInstanceOf[Filter] && l.plan.isInstanceOf[Filter]
       case _ => false
     }

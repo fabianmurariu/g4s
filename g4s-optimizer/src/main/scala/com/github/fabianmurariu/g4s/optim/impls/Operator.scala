@@ -3,7 +3,6 @@ package com.github.fabianmurariu.g4s.optim.impls
 import com.github.fabianmurariu.g4s.sparse.grbv2.GrBMatrix
 import com.github.fabianmurariu.g4s.sparse.grbv2.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
-import com.github.fabianmurariu.g4s.matrix.BlockingMatrix
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import com.github.fabianmurariu.g4s.optim.Name
 import com.github.fabianmurariu.g4s.optim.LogicMemoRef
@@ -14,6 +13,7 @@ import cats.effect.kernel.MonadCancel
 import cats.effect.unsafe.IORuntime
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.optim.EvaluatorGraph
+import com.github.fabianmurariu.g4s.optim.LogicMemoRefV2
 
 /**
   * base class for push operators
@@ -51,7 +51,7 @@ trait Operator { self =>
   /**
     *  the estimated cost of executing the operator
     * */
-  def cost: Long
+  def cost: Double = 1.2 * cardinality
 
   private def showInner: List[String] = {
     val sortedText =
@@ -64,8 +64,9 @@ trait Operator { self =>
         }
         .mkString("[", ",", "]")
     val sizeText = s"${self.cardinality}"
+    val costText = s"${self.cost}"
     val text =
-      List("size" -> sizeText, "sorted" -> sortedText, "output" -> coverText)
+      List("size" -> sizeText, "sorted" -> sortedText, "output" -> coverText, "cost" -> costText)
     text
       .filter { case (_, text) => text.nonEmpty }
       .map { case (key, text) => s"$key=$text" }
@@ -79,15 +80,15 @@ trait Operator { self =>
       val textBlocks = showInner.mkString(", ")
       val name = em.name.mkString("[", ",", "]")
       s"Edges[$textBlocks, label=$name, transpose=${em.transpose}]"
-    case ExpandMul(left, right) =>
+    case ExpandMul(left, right, sel) =>
       val padding = offset + "  "
       val textBlocks = showInner.mkString(", ")
-      s"""ExpandMul[$textBlocks]:\n${padding}l=${left
+      s"""ExpandMul[sel=$sel, $textBlocks]:\n${padding}l=${left
         .show(padding)}\n${padding}r=${right.show(padding)}"""
-    case FilterMul(left, right) =>
+    case FilterMul(left, right, sel) =>
       val padding = offset + "  "
       val textBlocks = showInner.mkString(", ")
-      s"""FilterMul[$textBlocks]:\n${padding}l=${left
+      s"""FilterMul[sel=$sel, $textBlocks]:\n${padding}l=${left
         .show(padding)}\n${padding}r=${right.show(padding)}"""
     case Diag(op) =>
       val padding = offset + "  "
@@ -162,7 +163,7 @@ object Operator {
   * entry of the actual phisical
   * operator
   * */
-case class RefOperator(logic: LogicMemoRef) extends Operator {
+case class RefOperator(logic: Either[LogicMemoRefV2, LogicMemoRef]) extends Operator {
 
   def eval(eg: EvaluatorGraph)(cb: Record => IO[Unit])(
       implicit G: GRB
@@ -170,12 +171,22 @@ case class RefOperator(logic: LogicMemoRef) extends Operator {
 
   def sorted: Option[Name] = None
 
-  def output: Seq[Name] = logic.output
+  def output: Seq[Name] = logic match {
+      case Left(value) => value.output
+      case Right(value) => value.output
+  }
 
   def cardinality: Long = 1L
 
-  def cost: Long = 1L
+  def signature:String = logic match {
+      case Left(value) => value.signature
+      case Right(value) => value.signature
+  }
+}
 
+object RefOperator{
+    def apply(logic:LogicMemoRef): RefOperator = RefOperator(Right(logic))
+    def apply(logic:LogicMemoRefV2):RefOperator = RefOperator(Left(logic))
 }
 
 case class GetNodeMatrix(
@@ -196,8 +207,7 @@ case class GetNodeMatrix(
 
   def output: Seq[Name] = Seq(binding)
 
-  def cost: Long = 1L
-
+  override def cost: Double = 0d
 }
 
 case class GetEdgeMatrix(
@@ -212,18 +222,19 @@ case class GetEdgeMatrix(
   )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] =
     eg.lookupEdges(name, transpose).flatMap {
       case (edges, _) =>
-        cb(Nodes(edges))
+        cb(Edges(edges))
     }
   def sorted: Option[Name] = None
 
   def output: Seq[Name] = binding.toSeq
 
-  def cost: Long = 1L
+  override def cost: Double = 0d
 }
 
 case class ExpandMul(
     frontier: Operator,
-    edges: Operator
+    edges: Operator,
+    edgesSel:Double = 1.0d
 ) extends Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
@@ -231,22 +242,22 @@ case class ExpandMul(
 
   def eval(
       eg: EvaluatorGraph
-  )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] = {
+  )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] =
     Operator.commonMxM(eg)(frontier, edges)(cb)
-  }
+
 
   def sorted: Option[Name] = frontier.sorted
 
   def output: Seq[Name] = frontier.output ++ edges.output.lastOption
 
-  def cardinality: Long = frontier.cardinality * edges.cardinality
+  def cardinality: Long = (Math.max((frontier.cardinality * edges.cardinality) * edgesSel, 1.0d)).toLong
 
-  def cost: Long = ???
 }
 
 case class FilterMul(
     frontier: Operator,
-    filter: Operator
+    filter: Operator,
+    sel: Double
 ) extends Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
@@ -262,9 +273,8 @@ case class FilterMul(
 
   def output: Seq[Name] = frontier.output ++ filter.output.lastOption
   // the filter should never output more than the input
-  def cardinality: Long = frontier.cardinality
+  def cardinality: Long = (Math.max((frontier.cardinality * filter.cardinality) * sel, 1.0d)).toLong
 
-  def cost: Long = ???
 }
 
 case class Diag(op: Operator) extends Operator {
@@ -294,10 +304,6 @@ case class Diag(op: Operator) extends Operator {
   // we estimate as 1/10
   def cardinality: Long = op.cardinality / 10
 
-  def cost: Long = ??? //FIXME: COST AND CARDINALITY ARE TWO DIFFERENT BEASTS!
-  //the output from this operation is at least the same as the prev operator
-  //the cost involves a reduce then then arranging the vector
-  //on the matrix diag
 
 }
 
@@ -325,8 +331,6 @@ case class MatrixTuples(op: Operator) extends Operator {
   def output: Seq[Name] = ???
 
   def cardinality: Long = ???
-
-  def cost: Long = ???
 
 }
 

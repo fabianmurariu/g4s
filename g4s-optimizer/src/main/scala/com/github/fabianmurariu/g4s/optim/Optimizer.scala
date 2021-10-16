@@ -57,7 +57,7 @@ class Optimizer(rules: Vector[Rule]) {
       MemoV2.pop(m) match {
         case None => m
         case Some((grp, memo)) =>
-          println(s"POP ${grp.logic.signature}")
+          // println(s"POP ${grp.logic.signature}")
           loop(MemoV2.exploreGroup(memo)(grp, OptimizerV2.defaultRules, ss))
       }
 
@@ -80,6 +80,7 @@ object Optimizer {
 
 object OptimizerV2 {
     def defaultRules = Vector(
+        new rules2.FilterExpandComutative,
         new rules2.LoadEdges,
         new rules2.LoadNodes,
         new rules2.Filter2MxM,

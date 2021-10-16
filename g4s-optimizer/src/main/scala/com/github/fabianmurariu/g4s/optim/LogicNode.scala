@@ -14,7 +14,24 @@ abstract class LogicNode(
   }
 
   def signature: String = this match {
+    // These two are equivalent
+    case Filter(Expand(from, to, transpose), filter) =>
+      val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
+      s"PathStep(${from.signature},${edgeSign},${filter.signature})"
+    case Expand(from, Filter(to, filter), transpose) => 
+      val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
+      s"PathStep(${from.signature},${edgeSign},${filter.signature})"
+    
+    // These two are equivalent but with LogicMemoRefV2 in between
+    case Filter(LogicMemoRefV2(Expand(from, to, transpose)), filter) =>
+      val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
+      s"PathStep(${from.signature},${edgeSign},${filter.signature})"
+    case Expand(from, LogicMemoRefV2(Filter(to, filter)), transpose) => 
+      val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
+      s"PathStep(${from.signature},${edgeSign},${filter.signature})"
+
     case LogicMemoRef(group) => group.logic.signature
+    case LogicMemoRefV2(logic) => logic.signature
     case node: GetNodes      => node.toString()
     case node: GetEdges      => node.toString()
     case Expand(from, to, transpose) =>

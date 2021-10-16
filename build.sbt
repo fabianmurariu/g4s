@@ -76,6 +76,13 @@ lazy val g4s = (project in file("."))
     name := "g4s"
   )
 
+lazy val g4sCore = (project in file("g4s-core"))
+  .enablePlugins(MUnitReportPlugin)
+  .settings(
+    commonSettings,
+    name := "g4s-core",
+  )
+
 lazy val g4sSparse = (project in file("g4s-sparse"))
   .enablePlugins(MUnitReportPlugin)
   .settings(
@@ -106,6 +113,7 @@ lazy val g4sOptim = (project in file("g4s-optimizer"))
     name := "g4s-optimizer",
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.1",
+      "io.github.kostaskougios" % "cloning" % "1.10.3",
       "org.opencypher" % "front-end-9.0" % "9.0-SNAPSHOT" excludeAll(
         ExclusionRule(organization = "org.scala-lang"),
         ExclusionRule(organization = "org.scalacheck", name= "scalacheck_2.12")

@@ -36,7 +36,8 @@ class Filter2MxM extends ImplementationRule {
         val physical: op.Operator =
           op.FilterMul(
             op.RefOperator(frontier),
-            op.RefOperator(filter)
+            op.RefOperator(filter),
+            1.0d
           )
 
         val newGM: GroupMember = EvaluatedGroupMember(gm.logic, physical)
@@ -162,14 +163,16 @@ class TreeJoinDiagFilter extends ImplementationRule {
                   gm.logic,
                   op.FilterMul(
                     op.RefOperator(front1),
-                    op.Diag(op.RefOperator(right))
+                    op.Diag(op.RefOperator(right)),
+                    1.0d
                   )
                 ),
                 EvaluatedGroupMember(
                   gm.logic,
                   op.FilterMul(
                     op.RefOperator(front2),
-                    op.Diag(op.RefOperator(left))
+                    op.Diag(op.RefOperator(left)),
+                    1.0d
                   )
                 )
               )
@@ -204,5 +207,5 @@ trait EvaluatorGraph {
   def lookupNodes(tpe: String): IO[(BlockingMatrix[Boolean], Long)] =
     this.lookupNodes(Some(tpe))
 
-  def statsStore: StatsStore
+  def withStats[B](f: StatsStore => IO[B]): IO[B]
 }

@@ -17,6 +17,12 @@ case class MemoV2(
 object MemoV2 {
   import rules2.Rule
 
+  def bestPlan(m: MemoV2): op.Operator =
+    m.rootPlans.keySet
+      .collect { case name: Binding => physical(m)(name).toSeq }
+      .flatten
+      .minBy(op => op.cardinality)
+
   def pop(m: MemoV2): Option[(GroupV2, MemoV2)] =
     m.queue.dequeueOption.map {
       case (group, rest) => group -> m.copy(queue = rest)
@@ -33,12 +39,13 @@ object MemoV2 {
     MemoV2(m.rootPlans, newQueue, newTable) -> newGroup
   }
 
-  def deRef(m: MemoV2)(ref: LogicMemoRef): GroupV2 =
+  def deRef(m: MemoV2)(ref: LogicMemoRefV2): GroupV2 =
     m.table(ref.signature)
 
-  def doEnqueuePlan(m: MemoV2)(logic: LogicNode): (MemoV2, GroupV2) =
+  def doEnqueuePlan(m: MemoV2)(logic: LogicNode): (MemoV2, GroupV2) = {
+    // println(s"ENQUEUE ${logic}")
     logic match {
-      case ref: LogicMemoRef => m -> deRef(m)(ref)
+      case ref: LogicMemoRefV2 => m -> deRef(m)(ref)
 
       case node: ForkNode =>
         val (memo, childrenRef) =
@@ -54,16 +61,20 @@ object MemoV2 {
         insertLogic(m)(node)
 
     }
+  }
 
   def exploreGroup(
       m: MemoV2
   )(g: GroupV2, rules: Vector[Rule], ss: StatsStore): MemoV2 = {
     val newMembers =
       g.equivalentExprs.flatMap(exprs => exprs.exploreMemberV2(rules, ss))
+    // println(s"NEW MEMBERS ${g.logic.signature} -> ${newMembers}")
     val newMemo = newMembers.foldLeft(m) {
       case (memo, newMember: UnEvaluatedGroupMember) =>
         val (newMemo, _) = doEnqueuePlan(memo)(newMember.logic)
         newMemo
+      case (memo, _: EvaluatedGroupMember) =>
+        memo
     }
     updateMembers(newMemo)(g, newMembers)
   }
@@ -71,48 +82,47 @@ object MemoV2 {
   def updateMembers(
       m: MemoV2
   )(g: GroupV2, newMembers: Vector[GroupMember]): MemoV2 = {
-    val newTable = m.table.updatedWith(g.logic.signature) {
-      case None    => Some(g.copy(equivalentExprs = newMembers))
-      case Some(_) => Some(g)
-    }
+    val newTable =
+      m.table + (g.logic.signature -> g.copy(equivalentExprs = newMembers))
     m.copy(table = newTable)
   }
 
   def physical(
       m: MemoV2
-  )(name: Binding)(implicit G: GRB): Option[op.Operator] = {
+  )(name: Binding): Option[op.Operator] = {
 
     def optimPhysicalPlan(signature: String): Option[op.Operator] = {
       val group = m.table(signature) // yes we can blow up if we don't have the signature
-      GroupV2.optim(group).optMember.map(_.plan)
+      GroupV2.optim(group).optMember.map(_.plan).flatMap(deRef)
     }
 
     def deRef(physical: op.Operator): Option[op.Operator] = physical match {
-      case _: op.RefOperator =>
-        throw new IllegalStateException(
-          "Local Optimal plan cannot be RefOperator"
-        )
+      // case _: op.RefOperator =>
+      //   throw new IllegalStateException(
+      //     "Local Optimal plan cannot be RefOperator"
+      //   )
 
-      case op.ExpandMul(from: op.RefOperator, to: op.RefOperator) =>
+      case op.ExpandMul(from: op.RefOperator, to: op.RefOperator, sel) =>
         for {
-          optimFrom <- optimPhysicalPlan(from.logic.signature)
-          optimTo <- optimPhysicalPlan(to.logic.signature)
-        } yield op.ExpandMul(optimFrom, optimTo)
+          optimFrom <- optimPhysicalPlan(from.signature)
+          optimTo <- optimPhysicalPlan(to.signature)
+        } yield op.ExpandMul(optimFrom, optimTo, sel)
 
-      case op.FilterMul(from: op.RefOperator, to: op.RefOperator) =>
+      case op.FilterMul(from: op.RefOperator, to: op.RefOperator, sel) =>
         for {
-          optimFrom <- optimPhysicalPlan(from.logic.signature)
-          optimTo <- optimPhysicalPlan(to.logic.signature)
-        } yield op.FilterMul(optimFrom, optimTo)
+          optimFrom <- optimPhysicalPlan(from.signature)
+          optimTo <- optimPhysicalPlan(to.signature)
+        } yield op.FilterMul(optimFrom, optimTo, sel)
 
       case op.FilterMul(
           from: op.RefOperator,
-          op.Diag(inner: op.RefOperator)
+          op.Diag(inner: op.RefOperator),
+          sel
           ) =>
         for {
-          optimFrom <- optimPhysicalPlan(from.logic.signature)
-          optimInner <- optimPhysicalPlan(inner.logic.signature)
-        } yield op.FilterMul(optimFrom, op.Diag(optimInner))
+          optimFrom <- optimPhysicalPlan(from.signature)
+          optimInner <- optimPhysicalPlan(inner.signature)
+        } yield op.FilterMul(optimFrom, op.Diag(optimInner), sel)
       case op => Option(op)
     }
 
@@ -179,7 +189,7 @@ class Memo(
     *
     * start from the root plans and
     * */
-  def physical(name: Binding)(implicit G: GRB): IO[op.Operator] = {
+  def physical(name: Binding): IO[op.Operator] = {
 
     def optimPhysicalPlan(signature: String): IO[op.Operator] = {
 
@@ -194,26 +204,27 @@ class Memo(
                 "Local Optimal plan cannot be RefOperator"
               )
             )
-          case op.ExpandMul(from: op.RefOperator, to: op.RefOperator) =>
+          case op.ExpandMul(from: op.RefOperator, to: op.RefOperator, sel) =>
             for {
-              optimFrom <- optimPhysicalPlan(from.logic.signature)
-              optimTo <- optimPhysicalPlan(to.logic.signature)
-            } yield op.ExpandMul(optimFrom, optimTo)
+              optimFrom <- optimPhysicalPlan(from.signature)
+              optimTo <- optimPhysicalPlan(to.signature)
+            } yield op.ExpandMul(optimFrom, optimTo, sel)
 
-          case op.FilterMul(from: op.RefOperator, to: op.RefOperator) =>
+          case op.FilterMul(from: op.RefOperator, to: op.RefOperator, sel) =>
             for {
-              optimFrom <- optimPhysicalPlan(from.logic.signature)
-              optimTo <- optimPhysicalPlan(to.logic.signature)
-            } yield op.FilterMul(optimFrom, optimTo)
+              optimFrom <- optimPhysicalPlan(from.signature)
+              optimTo <- optimPhysicalPlan(to.signature)
+            } yield op.FilterMul(optimFrom, optimTo, sel)
 
           case op.FilterMul(
               from: op.RefOperator,
-              op.Diag(inner: op.RefOperator)
+              op.Diag(inner: op.RefOperator),
+              sel
               ) =>
             for {
-              optimFrom <- optimPhysicalPlan(from.logic.signature)
-              optimInner <- optimPhysicalPlan(inner.logic.signature)
-            } yield op.FilterMul(optimFrom, op.Diag(optimInner))
+              optimFrom <- optimPhysicalPlan(from.signature)
+              optimInner <- optimPhysicalPlan(inner.signature)
+            } yield op.FilterMul(optimFrom, op.Diag(optimInner), sel)
 
           case op => IO(op)
         }

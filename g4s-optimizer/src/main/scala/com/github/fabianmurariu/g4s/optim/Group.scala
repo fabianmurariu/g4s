@@ -29,7 +29,7 @@ object GroupV2 {
       g: GroupV2
   ): EvaluatedGroupMember =
     g.equivalentExprs
-      .map { case egm: EvaluatedGroupMember => egm }
+      .collect { case egm: EvaluatedGroupMember => egm }
       .minBy(_.cost)
 }
 
