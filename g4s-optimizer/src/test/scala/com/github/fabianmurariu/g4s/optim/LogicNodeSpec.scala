@@ -4,6 +4,135 @@ import DirectedGraph.ops._
 
 class LogicNodeSpec extends munit.FunSuite {
 
+  test("signature equality of Filter Expand with Expand Filter") {
+    val filter = Filter(
+      Expand(
+        from = GetNodes(List("a"), Some(Binding("a"))),
+        to = GetEdges(List("X")),
+        transposed = false
+      ),
+      GetNodes(List("b"), Some(Binding("b")))
+    )
+    val expand = Expand(
+      GetNodes(List("a"), Some(Binding("a"))),
+      Filter(
+        GetEdges(List("X")),
+        GetNodes(List("b"), Some(Binding("b")))
+      ),
+      transposed = false
+    )
+
+    assertEquals(filter.signatureV2, expand.signatureV2)
+  }
+
+  test("signature equality nested Filter with Expand 1") {
+
+    val fork1 = Filter(
+      Expand(
+        from = GetNodes(List("a"), Some(Binding("a"))),
+        to = GetEdges(List("X")),
+        transposed = false
+      ),
+      Filter(
+        Expand(
+          from = GetNodes(List("c"), Some(Binding("c"))),
+          to = GetEdges(List("Y")),
+          transposed = false
+        ),
+        GetNodes(List("b"), Some(Binding("b")))
+      )
+    )
+
+    val fork2 = Filter(
+      Expand(
+        from = GetNodes(List("c"), Some(Binding("c"))),
+        to = GetEdges(List("Y")),
+        transposed = false
+      ),
+      Filter(
+        Expand(
+          from = GetNodes(List("a"), Some(Binding("a"))),
+          to = GetEdges(List("X")),
+          transposed = false
+        ),
+        GetNodes(List("b"), Some(Binding("b")))
+      )
+    )
+
+    assertEquals(fork1.signatureV2, fork2.signatureV2)
+  }
+
+  test("signature equality nested Filter with Expand 2") {
+
+    val fork1 = Filter(
+      Expand(
+        from = GetNodes(List("a"), Some(Binding("a"))),
+        to = GetEdges(List("X")),
+        transposed = false
+      ),
+      Filter(
+        Expand(
+          from = GetNodes(List("c"), Some(Binding("c"))),
+          to = GetEdges(List("Y")),
+          transposed = false
+        ),
+        GetNodes(List("b"), Some(Binding("b")))
+      )
+    )
+
+    val fork2 = Filter(
+      Expand(
+        from = GetNodes(List("c"), Some(Binding("c"))),
+        to = GetEdges(List("Y")),
+        transposed = false
+      ),
+      Filter(
+        Expand(
+          from = GetNodes(List("a"), Some(Binding("a"))),
+          to = GetEdges(List("X")),
+          transposed = false
+        ),
+        GetNodes(List("b"), Some(Binding("b")))
+      )
+    )
+
+    val fork3 = Expand(
+      from = GetNodes(List("a"), Some(Binding("a"))),
+      to = Filter(
+        GetEdges(List("X")),
+        Filter(
+          Expand(
+            from = GetNodes(List("c"), Some(Binding("c"))),
+            to = GetEdges(List("Y")),
+            transposed = false
+          ),
+          GetNodes(List("b"), Some(Binding("b")))
+        )
+      ),
+      transposed = false
+    )
+
+    val fork4 = Expand(
+      from = GetNodes(List("a"), Some(Binding("a"))),
+      to = Filter(
+        GetEdges(List("X")),
+        Expand(
+          from = GetNodes(List("c"), Some(Binding("c"))),
+          to = Filter(
+            GetEdges(List("Y")),
+            GetNodes(List("b"), Some(Binding("b")))
+          ),
+          transposed = false
+        )
+      ),
+      transposed = false
+    )
+
+    assertEquals(fork1.signatureV2, fork2.signatureV2)
+    assertEquals(fork2.signatureV2, fork3.signatureV2)
+    assertEquals(fork3.signatureV2, fork4.signatureV2)
+  }
+
   test("parse one hop path from cypher and generate query graph") {
     val query = """match (a:A)-[:X]->(c:C) return a"""
 

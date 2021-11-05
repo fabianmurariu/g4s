@@ -3,14 +3,14 @@ package com.github.fabianmurariu.g4s.optim
 import scala.collection.mutable.ArrayBuffer
 
 abstract class LogicNode(
-    cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty // FIXME: this could change in the future
+    cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty
 ) extends TreeNode[LogicNode](cs) { self =>
   // the binding outputs of the logical operator
   def output: Seq[Name]
 
   def deRef: LogicNode = self match {
-    case LogicMemoRef(group) => group.logic
-    case node                => node
+    case LogicMemoRefV2(logic) => logic
+    case node                  => node
   }
 
   def signature: String = this match {
@@ -18,22 +18,21 @@ abstract class LogicNode(
     case Filter(Expand(from, to, transpose), filter) =>
       val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
       s"PathStep(${from.signature},${edgeSign},${filter.signature})"
-    case Expand(from, Filter(to, filter), transpose) => 
+    case Expand(from, Filter(to, filter), transpose) =>
       val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
       s"PathStep(${from.signature},${edgeSign},${filter.signature})"
-    
+
     // These two are equivalent but with LogicMemoRefV2 in between
     case Filter(LogicMemoRefV2(Expand(from, to, transpose)), filter) =>
       val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
       s"PathStep(${from.signature},${edgeSign},${filter.signature})"
-    case Expand(from, LogicMemoRefV2(Filter(to, filter)), transpose) => 
+    case Expand(from, LogicMemoRefV2(Filter(to, filter)), transpose) =>
       val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
       s"PathStep(${from.signature},${edgeSign},${filter.signature})"
 
-    case LogicMemoRef(group) => group.logic.signature
     case LogicMemoRefV2(logic) => logic.signature
-    case node: GetNodes      => node.toString()
-    case node: GetEdges      => node.toString()
+    case node: GetNodes        => node.toString()
+    case node: GetEdges        => node.toString()
     case Expand(from, to, transpose) =>
       s"Expand(${from.signature},${to.signature},$transpose)"
     case Filter(frontier, filter) =>
@@ -42,13 +41,21 @@ abstract class LogicNode(
       s"Join($on, [${nodes.map(_.signature).toSet.mkString(",")}]"
   }
 
+  def signatureV2:Long= this match {
+    case LogicMemoRefV2(logic) => logic.signatureV2
+    case node: GetNodes        => node.hashCode().toLong
+    case node: GetEdges        => node.hashCode().toLong
+    case Expand(from, to, _) =>
+      from.signatureV2 ^ to.signatureV2
+    case Filter(frontier, filter) =>
+      frontier.signatureV2 ^ filter.signatureV2
+  }
+
 }
 
 sealed abstract class ForkNode(
     cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty
 ) extends LogicNode(cs) {
-
-  def rewire(children: Vector[LogicMemoRef]): LogicNode
 
   def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode
 }
@@ -69,9 +76,6 @@ case class GetEdges(
 case class Expand(from: LogicNode, to: LogicNode, transposed: Boolean)
     extends ForkNode(ArrayBuffer(from, to)) {
 
-  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
-    Expand(children(0), children(1), transposed)
-
   override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
     Expand(children(0), children(1), transposed)
   def output: Seq[Name] = to.output
@@ -81,9 +85,6 @@ case class Expand(from: LogicNode, to: LogicNode, transposed: Boolean)
 case class Filter(frontier: LogicNode, filter: LogicNode)
     extends ForkNode(ArrayBuffer(frontier, filter)) {
   def output: Seq[Name] = filter.output
-
-  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
-    Filter(children(0), children(1))
 
   override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
     Filter(children(0), children(1))
@@ -97,9 +98,6 @@ case class JoinPath(
 ) extends ForkNode(ArrayBuffer(expr, cont)) {
   def output: Seq[Name] = Seq(expr, cont).map(_.output).reduce(_ ++ _)
 
-  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
-    JoinPath(children(0), children(1), on)
-
   override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
     JoinPath(children(0), children(1), on)
 }
@@ -110,9 +108,6 @@ case class Join(
     cs: Vector[LogicNode] // children
 ) extends ForkNode(cs.to(ArrayBuffer)) {
 
-  override def rewire(children: Vector[LogicMemoRef]): LogicNode =
-    Join(on, children)
-
   override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
     Join(on, children)
 
@@ -122,14 +117,6 @@ case class Join(
 
 case class LogicMemoRefV2(logic: LogicNode)
     extends LogicNode(ArrayBuffer(logic)) {
-
-  override def output: Seq[Name] = plan.output
-
-  def plan: LogicNode = children.next()
-}
-
-case class LogicMemoRef(group: Group)
-    extends LogicNode(ArrayBuffer(group.logic)) {
 
   override def output: Seq[Name] = plan.output
 

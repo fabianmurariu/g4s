@@ -2,30 +2,33 @@ package com.github.fabianmurariu.g4s.optim
 
 import cats.implicits._
 import com.github.fabianmurariu.g4s.optim.{impls => op}
-import com.github.fabianmurariu.g4s.sparse.grb.GRB
-import java.util.concurrent.ConcurrentHashMap
-import cats.effect.kernel.Ref
-import cats.effect.IO
 import scala.collection.immutable.Queue
 
 case class MemoV2(
     rootPlans: Map[Binding, LogicNode],
-    queue: Queue[GroupV2] = Queue.empty[GroupV2],
+    queue: Queue[String] = Queue.empty[String],
     table: Map[String, GroupV2] = Map.empty[String, GroupV2]
 )
 
 object MemoV2 {
   import rules2.Rule
 
-  def bestPlan(m: MemoV2): op.Operator =
-    m.rootPlans.keySet
-      .collect { case name: Binding => physical(m)(name).toSeq }
+  def bestPlan(m: MemoV2): op.Operator = {
+
+    val best = m.rootPlans.keySet
+      .collect { case name: Binding => m.rootPlans.get(name).toSeq }
       .flatten
-      .minBy(op => op.cardinality)
+      .flatMap(logic => m.table.get(logic.signature))
+      .collect { case GroupV2(_, _, Some(cgm: CostedGroupMember)) => cgm }
+      .minBy(_.cost)
+      .plan
+
+    deRefOperator(m)(best).get
+  }
 
   def pop(m: MemoV2): Option[(GroupV2, MemoV2)] =
     m.queue.dequeueOption.map {
-      case (group, rest) => group -> m.copy(queue = rest)
+      case (signature, rest) => m.table(signature) -> m.copy(queue = rest)
     }
 
   def insertLogic(m: MemoV2)(logic: LogicNode): (MemoV2, GroupV2) = {
@@ -33,9 +36,18 @@ object MemoV2 {
     insertGroup(m)(newGroup)
   }
 
+  def updateGroup(m: MemoV2)(g: GroupV2) =
+    m.copy(table = m.table + (g.logic.signature -> g))
+
   def insertGroup(m: MemoV2)(newGroup: GroupV2) = {
-    val newTable = m.table + (newGroup.logic.signature -> newGroup)
-    val newQueue = m.queue.enqueue(newGroup)
+    val signature = newGroup.logic.signature
+    // val newTable = m.table + (signature -> newGroup)
+    val newTable = m.table.updatedWith(signature) {
+      case None => Some(newGroup)
+      case Some(grp) =>
+        Some(newGroup.copy(optMember = grp.optMember))
+    }
+    val newQueue = m.queue.enqueue(signature)
     MemoV2(m.rootPlans, newQueue, newTable) -> newGroup
   }
 
@@ -43,7 +55,6 @@ object MemoV2 {
     m.table(ref.signature)
 
   def doEnqueuePlan(m: MemoV2)(logic: LogicNode): (MemoV2, GroupV2) = {
-    // println(s"ENQUEUE ${logic}")
     logic match {
       case ref: LogicMemoRefV2 => m -> deRef(m)(ref)
 
@@ -68,50 +79,46 @@ object MemoV2 {
   )(g: GroupV2, rules: Vector[Rule], ss: StatsStore): MemoV2 = {
     val newMembers =
       g.equivalentExprs.flatMap(exprs => exprs.exploreMemberV2(rules, ss))
-    // println(s"NEW MEMBERS ${g.logic.signature} -> ${newMembers}")
-    val newMemo = newMembers.foldLeft(m) {
-      case (memo, newMember: UnEvaluatedGroupMember) =>
-        val (newMemo, _) = doEnqueuePlan(memo)(newMember.logic)
-        newMemo
-      case (memo, _: EvaluatedGroupMember) =>
-        memo
-    }
-    updateMembers(newMemo)(g, newMembers)
-  }
 
-  def updateMembers(
-      m: MemoV2
-  )(g: GroupV2, newMembers: Vector[GroupMember]): MemoV2 = {
-    val newTable =
-      m.table + (g.logic.signature -> g.copy(equivalentExprs = newMembers))
-    m.copy(table = newTable)
-  }
+    val processedNewMembers = Vector.newBuilder[GroupMember]
 
-  def physical(
-      m: MemoV2
-  )(name: Binding): Option[op.Operator] = {
-
-    def optimPhysicalPlan(signature: String): Option[op.Operator] = {
-      val group = m.table(signature) // yes we can blow up if we don't have the signature
-      GroupV2.optim(group).optMember.map(_.plan).flatMap(deRef)
+    val (newMemo, members) = newMembers.foldLeft((m, processedNewMembers)) {
+      case ((memo, b), UnEvaluatedGroupMember(logic, _)) =>
+        val (m, grp) = doEnqueuePlan(memo)(logic)
+        (m, b += UnEvaluatedGroupMember(grp.logic))
+      case ((m, b), g: PhysicalPlanMember) =>
+        (m, b += g)
     }
 
-    def deRef(physical: op.Operator): Option[op.Operator] = physical match {
-      // case _: op.RefOperator =>
-      //   throw new IllegalStateException(
-      //     "Local Optimal plan cannot be RefOperator"
-      //   )
+    val newGroup = g.copy(equivalentExprs = members.result())
+
+    val (memo, _) =
+      GroupV2.optimGroup(newGroup, MemoV2.updateGroup(newMemo)(newGroup))
+    memo
+  }
+
+  def optimPhysicalPlan(m: MemoV2)(signature: String): Option[op.Operator] = {
+    val group = m.table(signature) // yes we can blow up if we don't have the signature
+    // GroupV2.optim(group, m).optMember.map(_.plan).flatMap(deRef)
+    group.optMember.collect {
+      case CostedGroupMember(_, plan, _, _) => deRefOperator(m)(plan)
+    }.flatten
+
+  }
+
+  def deRefOperator(m: MemoV2)(physical: op.Operator): Option[op.Operator] =
+    physical match {
 
       case op.ExpandMul(from: op.RefOperator, to: op.RefOperator, sel) =>
         for {
-          optimFrom <- optimPhysicalPlan(from.signature)
-          optimTo <- optimPhysicalPlan(to.signature)
+          optimFrom <- optimPhysicalPlan(m)(from.signature)
+          optimTo <- optimPhysicalPlan(m)(to.signature)
         } yield op.ExpandMul(optimFrom, optimTo, sel)
 
       case op.FilterMul(from: op.RefOperator, to: op.RefOperator, sel) =>
         for {
-          optimFrom <- optimPhysicalPlan(from.signature)
-          optimTo <- optimPhysicalPlan(to.signature)
+          optimFrom <- optimPhysicalPlan(m)(from.signature)
+          optimTo <- optimPhysicalPlan(m)(to.signature)
         } yield op.FilterMul(optimFrom, optimTo, sel)
 
       case op.FilterMul(
@@ -120,131 +127,12 @@ object MemoV2 {
           sel
           ) =>
         for {
-          optimFrom <- optimPhysicalPlan(from.signature)
-          optimInner <- optimPhysicalPlan(inner.signature)
+          optimFrom <- optimPhysicalPlan(m)(from.signature)
+          optimInner <- optimPhysicalPlan(m)(inner.signature)
         } yield op.FilterMul(optimFrom, op.Diag(optimInner), sel)
+      case op.Diag(inner: op.RefOperator) =>
+        optimPhysicalPlan(m)(inner.signature).map(op.Diag(_))
       case op => Option(op)
     }
 
-    for {
-      rootPlan <- m.rootPlans.get(name)
-      linkedPhysical <- optimPhysicalPlan(rootPlan.signature)
-      phys <- deRef(linkedPhysical)
-    } yield phys
-  }
-
-}
-
-class Memo(
-    val rootPlans: Map[Binding, LogicNode],
-    val stack: Ref[IO, Queue[Group]],
-    val table: ConcurrentHashMap[String, Group]
-) {
-  def doEnqueuePlan(logic: LogicNode): IO[Group] = logic match {
-    case ref: LogicMemoRef => IO.delay(ref.group)
-    case _ =>
-      IO.delay(println(s"ENQUEUE $logic")) *> IO.delay(logic.leaf).flatMap {
-        case true =>
-          insertGroup(logic)
-        case false =>
-          logic.children.toVector
-            .foldM(Vector.newBuilder[LogicMemoRef]) {
-              case (builder, child) =>
-                doEnqueuePlan(child).flatMap(group =>
-                  IO.delay {
-                    builder += LogicMemoRef(group)
-                  }
-                )
-            }
-            .map { cs => logic.asInstanceOf[ForkNode].rewire(cs.result()) }
-            .flatMap(insertGroup(_))
-      }
-  }
-  def pop: IO[Option[Group]] =
-    stack.modify {
-      _.dequeueOption match {
-        case None               => (Queue.empty, None)
-        case Some((head, rest)) => (rest, Some(head))
-      }
-    }
-
-  def isDone: IO[Boolean] = stack.modify(list => (list, list.isEmpty))
-
-  def insertGroup(logic: LogicNode): IO[Group] = {
-    for {
-      newG <- Group(this, logic)
-      g <- stack.modify { s =>
-        // this is cute because table.put is idempotent
-        // so this block can run however many times and it will update the stack exactly once
-        table.putIfAbsent(logic.signature, newG)
-        (s.enqueue(newG), newG)
-      }
-    } yield g
-
-  }
-
-  /**
-    * From this memo derrive the best
-    * physical plan the rules have found
-    *
-    * start from the root plans and
-    * */
-  def physical(name: Binding): IO[op.Operator] = {
-
-    def optimPhysicalPlan(signature: String): IO[op.Operator] = {
-
-      for {
-        grp <- IO.delay(table.get(signature))
-        minGroupMember <- grp.optGroupMember
-        refPlan <- IO(minGroupMember.plan)
-        plan <- refPlan match {
-          case _: op.RefOperator =>
-            IO.raiseError(
-              new IllegalStateException(
-                "Local Optimal plan cannot be RefOperator"
-              )
-            )
-          case op.ExpandMul(from: op.RefOperator, to: op.RefOperator, sel) =>
-            for {
-              optimFrom <- optimPhysicalPlan(from.signature)
-              optimTo <- optimPhysicalPlan(to.signature)
-            } yield op.ExpandMul(optimFrom, optimTo, sel)
-
-          case op.FilterMul(from: op.RefOperator, to: op.RefOperator, sel) =>
-            for {
-              optimFrom <- optimPhysicalPlan(from.signature)
-              optimTo <- optimPhysicalPlan(to.signature)
-            } yield op.FilterMul(optimFrom, optimTo, sel)
-
-          case op.FilterMul(
-              from: op.RefOperator,
-              op.Diag(inner: op.RefOperator),
-              sel
-              ) =>
-            for {
-              optimFrom <- optimPhysicalPlan(from.signature)
-              optimInner <- optimPhysicalPlan(inner.signature)
-            } yield op.FilterMul(optimFrom, op.Diag(optimInner), sel)
-
-          case op => IO(op)
-        }
-      } yield plan
-    }
-
-    for {
-      logic <- IO.delay(rootPlans(name))
-      plan <- optimPhysicalPlan(logic.signature)
-    } yield plan
-
-  }
-
-}
-
-object Memo {
-  def apply(
-      rootPlans: Map[Binding, LogicNode]
-  ): IO[Memo] = Ref.of[IO, Queue[Group]](Queue.empty[Group]).map { queue =>
-    val table = new ConcurrentHashMap[String, Group]
-    new Memo(rootPlans, queue, table)
-  }
 }

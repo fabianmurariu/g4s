@@ -17,7 +17,7 @@ object rules2 {
   trait ImplementationRule extends Rule
   trait TransformationRule extends Rule
 
-  class FilterExpandComutative extends ImplementationRule {
+  class FilterExpandComutative extends TransformationRule {
 
     override def apply(gm: GroupMember, v2: StatsStore): List[GroupMember] =
       gm.logic match {
@@ -39,7 +39,7 @@ object rules2 {
           LogicMemoRefV2(Expand(_: LogicMemoRefV2, _: LogicMemoRefV2, _)),
           _: LogicMemoRefV2
           ) =>
-        true
+        true && gm.isInstanceOf[UnEvaluatedGroupMember]
       case _ => false
     }
 
@@ -54,6 +54,20 @@ object rules2 {
         stats: StatsStore
     ): List[GroupMember] = {
       gm.logic match {
+        // case Filter(
+        //     frontier@ LogicMemoRefV2(e: GetEdges),
+        //     filter @ LogicMemoRefV2(n: GetNodes)
+        //     ) =>
+        //   val sel = stats.nodeEdgeInSel(e.tpe.head, n.label.head) FIXME: this doesn't work when it does uncomment
+        //   val physical: op.Operator =
+        //     op.FilterMul(
+        //       op.RefOperator(frontier),
+        //       op.RefOperator(filter),
+        //       sel
+        //     )
+
+        //   val newGM: GroupMember = EvaluatedGroupMember(gm.logic, physical)
+        //   List(newGM)
         case Filter(
             frontier: LogicMemoRefV2,
             filter @ LogicMemoRefV2(n: GetNodes)
@@ -180,7 +194,7 @@ object rules2 {
     * and/or sorted
     *
     * */
-  class TreeJoinDiagFilter extends ImplementationRule {
+  class TreeJoinDiagFilter extends TransformationRule {
 
     override def apply(
         gm: GroupMember,
@@ -199,6 +213,7 @@ object rules2 {
                 Filter(front1: LogicMemoRefV2, _),
                 Filter(front2: LogicMemoRefV2, _)
                 ) =>
+
               List(
                 EvaluatedGroupMember(
                   gm.logic,

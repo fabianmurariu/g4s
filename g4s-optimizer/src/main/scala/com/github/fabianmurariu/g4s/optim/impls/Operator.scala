@@ -5,7 +5,6 @@ import com.github.fabianmurariu.g4s.sparse.grbv2.MxM
 import com.github.fabianmurariu.g4s.sparse.grb.GrBSemiring
 import com.github.fabianmurariu.g4s.sparse.grb.GRB
 import com.github.fabianmurariu.g4s.optim.Name
-import com.github.fabianmurariu.g4s.optim.LogicMemoRef
 import cats.effect.IO
 import com.github.fabianmurariu.g4s.optim.Binding
 import com.github.fabianmurariu.g4s.optim.UnNamed
@@ -14,6 +13,9 @@ import cats.effect.unsafe.IORuntime
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.optim.EvaluatorGraph
 import com.github.fabianmurariu.g4s.optim.LogicMemoRefV2
+import com.github.fabianmurariu.g4s.optim.MemoV2
+import com.github.fabianmurariu.g4s.optim.EvaluatedGroupMember
+import com.github.fabianmurariu.g4s.optim.CostedGroupMember
 
 /**
   * base class for push operators
@@ -42,18 +44,11 @@ trait Operator { self =>
     */
   def output: Seq[Name]
 
-  /**
-    * the estimated cardinality of the output
-    * how much stuff do we expect to produce
-    */
-  def cardinality: Long
+  def relativeCost(m: MemoV2): (Double, Long) =
+    Operator.relativeCost(m, self)
 
-  /**
-    *  the estimated cost of executing the operator
-    * */
-  def cost: Double = 1.2 * cardinality
-
-  private def showInner: List[String] = {
+  private def showInner(m: MemoV2): List[String] = {
+    val (cost, cardinality) = relativeCost(m)
     val sortedText =
       self.sorted.collect { case Binding(name) => name }.getOrElse("")
     val coverText =
@@ -63,39 +58,44 @@ trait Operator { self =>
           case _: UnNamed    => "*"
         }
         .mkString("[", ",", "]")
-    val sizeText = s"${self.cardinality}"
-    val costText = s"${self.cost}"
+    val sizeText = s"${cardinality}"
+    val costText = s"${cost}"
     val text =
-      List("size" -> sizeText, "sorted" -> sortedText, "output" -> coverText, "cost" -> costText)
+      List(
+        "size" -> sizeText,
+        "sorted" -> sortedText,
+        "output" -> coverText,
+        "cost" -> costText
+      )
     text
       .filter { case (_, text) => text.nonEmpty }
       .map { case (key, text) => s"$key=$text" }
   }
 
-  def show(offset: String = ""): String = self match {
+  def show(m: MemoV2, offset: String = ""): String = self match {
     case _: GetNodeMatrix =>
-      val textBlocks = showInner.mkString(", ")
+      val textBlocks = showInner(m).mkString(", ")
       s"Nodes[$textBlocks]"
     case em: GetEdgeMatrix =>
-      val textBlocks = showInner.mkString(", ")
+      val textBlocks = showInner(m).mkString(", ")
       val name = em.name.mkString("[", ",", "]")
       s"Edges[$textBlocks, label=$name, transpose=${em.transpose}]"
     case ExpandMul(left, right, sel) =>
       val padding = offset + "  "
-      val textBlocks = showInner.mkString(", ")
+      val textBlocks = showInner(m).mkString(", ")
       s"""ExpandMul[sel=$sel, $textBlocks]:\n${padding}l=${left
-        .show(padding)}\n${padding}r=${right.show(padding)}"""
+        .show(m, padding)}\n${padding}r=${right.show(m, padding)}"""
     case FilterMul(left, right, sel) =>
       val padding = offset + "  "
-      val textBlocks = showInner.mkString(", ")
+      val textBlocks = showInner(m).mkString(", ")
       s"""FilterMul[sel=$sel, $textBlocks]:\n${padding}l=${left
-        .show(padding)}\n${padding}r=${right.show(padding)}"""
+        .show(m, padding)}\n${padding}r=${right.show(m, padding)}"""
     case Diag(op) =>
       val padding = offset + "  "
-      val textBlocks = showInner.mkString(", ")
-      s"""Diag[$textBlocks]:\n${padding}on=${op.show(padding)}"""
+      val textBlocks = showInner(m).mkString(", ")
+      s"""Diag[$textBlocks]:\n${padding}on=${op.show(m, padding)}"""
     case RefOperator(_) =>
-      val textBlocks = showInner.mkString(", ")
+      val textBlocks = showInner(m).mkString(", ")
       s"Ref[${textBlocks}]"
   }
 }
@@ -106,6 +106,40 @@ object Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
+
+  def relativeCost(m: MemoV2, op: Operator): (Double, Long) = op match {
+    case RefOperator(logic) =>
+      m.table(logic.signature).optMember match {
+        case Some(CostedGroupMember(_, _, cost, card)) =>
+          (cost, card)
+        case Some(EvaluatedGroupMember(_, plan)) =>
+          relativeCost(m, plan)
+        case _ =>
+          throw new IllegalStateException(
+            s"Unable to calculate cost or cardinality in un-optimized member ${logic.signature}"
+          )
+      }
+    case GetEdgeMatrix(_, _, _, card) => (0d, card)
+    case GetNodeMatrix(_, _, card)    => (0d, card)
+    case ExpandMul(frontier, edges, sel) =>
+      val (frontierCost, frontierCard) = relativeCost(m, frontier)
+      val (edgesCost, edgesCard) = relativeCost(m, edges)
+      val cardinality = Math.max((frontierCard * edgesCard) * sel, 1.0d).toLong
+      val cost = (1.2 * cardinality) + frontierCost + edgesCost
+      (cost, cardinality)
+    case FilterMul(frontier, filter, sel) =>
+      val (frontierCost, frontierCard) = relativeCost(m, frontier)
+      val (filterCost, filterCard) = relativeCost(m, filter)
+      val cardinality = Math.max((frontierCard * filterCard) * sel, 1.0d).toLong
+      val cost = (1.2 * cardinality) + frontierCost + filterCost
+      (cost, cardinality)
+    case Diag(op) =>
+      val (opCost, opCard) = relativeCost(m, op)
+      val card = Math.sqrt(opCard.toDouble).toLong
+      val cost = (1.2 * opCard) + opCost
+      (cost, card)
+
+  }
 
   def commonMxM(eg: EvaluatorGraph)(left: Operator, right: Operator)(
       cb: Record => IO[Unit]
@@ -163,7 +197,7 @@ object Operator {
   * entry of the actual phisical
   * operator
   * */
-case class RefOperator(logic: Either[LogicMemoRefV2, LogicMemoRef]) extends Operator {
+case class RefOperator(logic: LogicMemoRefV2) extends Operator {
 
   def eval(eg: EvaluatorGraph)(cb: Record => IO[Unit])(
       implicit G: GRB
@@ -172,21 +206,19 @@ case class RefOperator(logic: Either[LogicMemoRefV2, LogicMemoRef]) extends Oper
   def sorted: Option[Name] = None
 
   def output: Seq[Name] = logic match {
-      case Left(value) => value.output
-      case Right(value) => value.output
+    case LogicMemoRefV2(value) => value.output
   }
 
   def cardinality: Long = 1L
 
-  def signature:String = logic match {
-      case Left(value) => value.signature
-      case Right(value) => value.signature
+  def signature: String = logic match {
+    case LogicMemoRefV2(value) => value.signature
   }
+
 }
 
-object RefOperator{
-    def apply(logic:LogicMemoRef): RefOperator = RefOperator(Right(logic))
-    def apply(logic:LogicMemoRefV2):RefOperator = RefOperator(Left(logic))
+object RefOperator {
+  def apply(logic: LogicMemoRefV2): RefOperator = new RefOperator(logic)
 }
 
 case class GetNodeMatrix(
@@ -207,7 +239,6 @@ case class GetNodeMatrix(
 
   def output: Seq[Name] = Seq(binding)
 
-  override def cost: Double = 0d
 }
 
 case class GetEdgeMatrix(
@@ -228,16 +259,15 @@ case class GetEdgeMatrix(
 
   def output: Seq[Name] = binding.toSeq
 
-  override def cost: Double = 0d
 }
 
 case class ExpandMul(
     frontier: Operator,
     edges: Operator,
-    edgesSel:Double = 1.0d
+    edgesSel: Double = 1.0d
 ) extends Operator {
 
-  val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
+  lazy val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring //FIXME get rid of this
 
   def eval(
@@ -245,12 +275,9 @@ case class ExpandMul(
   )(cb: Record => IO[Unit])(implicit G: GRB): IO[Unit] =
     Operator.commonMxM(eg)(frontier, edges)(cb)
 
-
   def sorted: Option[Name] = frontier.sorted
 
-  def output: Seq[Name] = frontier.output ++ edges.output.lastOption
-
-  def cardinality: Long = (Math.max((frontier.cardinality * edges.cardinality) * edgesSel, 1.0d)).toLong
+  def output: Seq[Name] = (frontier.output.headOption ++ edges.output.lastOption).toSeq
 
 }
 
@@ -271,9 +298,7 @@ case class FilterMul(
 
   def sorted: Option[Name] = frontier.sorted
 
-  def output: Seq[Name] = frontier.output ++ filter.output.lastOption
-  // the filter should never output more than the input
-  def cardinality: Long = (Math.max((frontier.cardinality * filter.cardinality) * sel, 1.0d)).toLong
+  def output: Seq[Name] = (frontier.output.headOption ++ filter.output.lastOption).toSeq
 
 }
 
@@ -300,17 +325,13 @@ case class Diag(op: Operator) extends Operator {
 
   def output: Seq[Name] = op.output.lastOption.toSeq
 
-  // max cardinality is the number of items on the diagonal
-  // we estimate as 1/10
-  def cardinality: Long = op.cardinality / 10
-
-
 }
+
+import scala.collection.mutable
 
 //FIXME: trivial renderer that will push every item onto a buffer
 case class MatrixTuples(op: Operator) extends Operator {
 
-  import scala.collection.mutable
 
   def eval(
       eg: EvaluatorGraph
@@ -320,17 +341,15 @@ case class MatrixTuples(op: Operator) extends Operator {
         for {
           data <- rec.mat.extract
           (is, js, _) = data
-          buf = mutable.ArrayBuffer.from(is.zip(js))
+          buf: mutable.ArrayBuffer[(Long, Long)]= mutable.ArrayBuffer.from(is.zip(js))
           _ <- cb(OutputRecord(buf))
         } yield ()
     }
   }
 
-  def sorted: Option[Name] = ???
+  def sorted: Option[Name] = None
 
-  def output: Seq[Name] = ???
-
-  def cardinality: Long = ???
+  def output: Seq[Name] = op.output
 
 }
 
