@@ -211,7 +211,7 @@ case class RefOperator(logic: LogicMemoRefV2) extends Operator {
 
   def cardinality: Long = 1L
 
-  def signature: String = logic match {
+  def signature: Int = logic match {
     case LogicMemoRefV2(value) => value.signature
   }
 

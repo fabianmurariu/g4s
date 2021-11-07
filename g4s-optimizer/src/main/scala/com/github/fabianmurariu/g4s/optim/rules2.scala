@@ -54,20 +54,6 @@ object rules2 {
         stats: StatsStore
     ): List[GroupMember] = {
       gm.logic match {
-        // case Filter(
-        //     frontier@ LogicMemoRefV2(e: GetEdges),
-        //     filter @ LogicMemoRefV2(n: GetNodes)
-        //     ) =>
-        //   val sel = stats.nodeEdgeInSel(e.tpe.head, n.label.head) FIXME: this doesn't work when it does uncomment
-        //   val physical: op.Operator =
-        //     op.FilterMul(
-        //       op.RefOperator(frontier),
-        //       op.RefOperator(filter),
-        //       sel
-        //     )
-
-        //   val newGM: GroupMember = EvaluatedGroupMember(gm.logic, physical)
-        //   List(newGM)
         case Filter(
             frontier: LogicMemoRefV2,
             filter @ LogicMemoRefV2(n: GetNodes)
@@ -86,7 +72,7 @@ object rules2 {
           val physical: op.Operator =
             op.FilterMul(
               op.RefOperator(frontier),
-              op.RefOperator(filter),
+              op.Diag(op.RefOperator(filter)),
               1.0d
             )
 
@@ -164,11 +150,11 @@ object rules2 {
         stats: StatsStore
     ): List[GroupMember] = {
       gm.logic match {
-        case GetNodes((label :: _), sorted) =>
-          val card = stats.nodesTotal(Some(label))
+        case GetNodes(label, sorted) =>
+          val card = stats.nodesTotal(label)
           val physical = op.GetNodeMatrix(
             sorted.getOrElse(new UnNamed),
-            Some(label),
+            label,
             card
           )
           List(
@@ -201,19 +187,12 @@ object rules2 {
         v2: StatsStore
     ): List[GroupMember] =
       gm.logic match {
-        case Join(
-            on,
-            Vector(left: LogicMemoRefV2, right: LogicMemoRefV2, _*)
-            ) =>
-          // diag on left FIXME: this is not complete but it's easy to express now
-          // probably requires a transformation rule to generate the binary join trees
-          // from the initial list
+        case Join(left: LogicMemoRefV2, right: LogicMemoRefV2, _) =>
           (left.plan, right.plan) match {
             case (
                 Filter(front1: LogicMemoRefV2, _),
                 Filter(front2: LogicMemoRefV2, _)
                 ) =>
-
               List(
                 EvaluatedGroupMember(
                   gm.logic,
@@ -237,7 +216,7 @@ object rules2 {
       }
 
     override def isDefinedAt(gm: GroupMember): Boolean = gm.logic match {
-      case Join(_, Vector(l: LogicMemoRefV2, r: LogicMemoRefV2, _*)) =>
+      case Join(l: LogicMemoRefV2, r: LogicMemoRefV2, __) =>
         r.plan.isInstanceOf[Filter] && l.plan.isInstanceOf[Filter]
       case _ => false
     }

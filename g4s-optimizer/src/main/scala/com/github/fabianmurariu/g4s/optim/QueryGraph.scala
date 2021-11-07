@@ -52,14 +52,14 @@ object QueryGraph {
       element: PatternElement
   ): Node = element match {
     case NodePattern(None, labels, _) =>
-      val node = Node(new UnNamed)(labels.map(_.name))
+      val node = Node(new UnNamed)(labels.headOption.map(_.name))
       g.insert(node)
       node
     case NodePattern(Some(Variable(name)), labels, _) =>
-      val node = Node(Binding(name))(labels.map(_.name))
+      val node = Node(Binding(name))(labels.headOption.map(_.name))
       val updateNode = g.get(node) match {
         case Some(v) =>
-          v.labels = node.labels ++ v.labels
+          v.labels = node.labels.headOption
           v
         case None => node
       }
@@ -100,5 +100,5 @@ object QueryGraph {
 
 }
 
-case class Node(name: Name)(var labels: Seq[String] = Seq.empty)
+case class Node(name: Name)(var labels: Option[String] = None)
 case class Edge(direction: Direction, types: Seq[String])

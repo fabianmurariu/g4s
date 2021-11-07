@@ -9,6 +9,7 @@ import com.github.fabianmurariu.g4s.optim.impls.GetEdgeMatrix
 import com.github.fabianmurariu.g4s.optim.impls.ExpandMul
 import com.github.fabianmurariu.g4s.optim.impls.FilterMul
 import cats.effect.IO
+import com.github.fabianmurariu.g4s.optim.impls.Diag
 
 class OptimSpec extends munit.FunSuite {
 
@@ -58,11 +59,12 @@ class OptimSpec extends munit.FunSuite {
       1.0
     )
 
-    io.flatMap { case (plan, memo) =>
-        IO {
-          println(plan.show(memo))
-          assertEquals(plan, expected)
-        }
+    io.flatMap {
+        case (plan, memo) =>
+          IO {
+            println(plan.show(memo))
+            assertEquals(plan, expected)
+          }
       }
       .unsafeRunSync()
 
@@ -105,11 +107,12 @@ class OptimSpec extends munit.FunSuite {
         0.8
       )
 
-    io.flatMap { case (plan, memo) =>
-        IO {
-          println(plan.show(memo))
-          assertEquals(plan, expected)
-        }
+    io.flatMap {
+        case (plan, memo) =>
+          IO {
+            println(plan.show(memo))
+            assertEquals(plan, expected)
+          }
       }
       .unsafeRunSync()
 
@@ -149,7 +152,7 @@ class OptimSpec extends munit.FunSuite {
         qg <- GraphDB.parse(query)
         plan <- GraphDB.optim(graph)(qg)
         end <- IO.monotonic
-        _ <- IO {println((end - start).toMillis)}
+        _ <- IO { println((end - start).toMillis) }
       } yield plan
     }
 
@@ -172,12 +175,13 @@ class OptimSpec extends munit.FunSuite {
         1.0
       )
 
-    io.flatMap { case (plan, memo) =>
-        IO {
-          println(plan.show(memo))
-          assertEquals(plan, expected)
-          assertEquals(plan.output, Vector[Name](Binding("a"), Binding("c")))
-        }
+    io.flatMap {
+        case (plan, memo) =>
+          IO {
+            println(plan.show(memo))
+            assertEquals(plan, expected)
+            assertEquals(plan.output, Vector[Name](Binding("a"), Binding("c")))
+          }
       }
       .unsafeRunSync()
 
@@ -185,12 +189,11 @@ class OptimSpec extends munit.FunSuite {
 
   test(
     """Optimize2 a fork with 1 hop each graph match (a:`fix.A`)-[:`fix.X`]->(b:`fix.B`)<-[:`fix.Y`]-(c:`fix.C`)
-      return b where selectivity of C (high) and B (low) determines to optimizer outcome A * X * Diag(C * Y * B)""".ignore
+      return b where selectivity of C (high) and B (low) determines to optimizer outcome A * X * Diag(C * Y * B) """
   ) {
 
     val query =
       """match (a:`fix.A`)-[:`fix.X`]->(b:`fix.B`)<-[:`fix.Y`]-(c:`fix.C`) return b"""
-
 
     val io = ConcurrentDirectedGraph[fix.Vertex, fix.Relation].use { graph =>
       for {
@@ -225,30 +228,33 @@ class OptimSpec extends munit.FunSuite {
     }
 
     val expected =
-      ExpandMul(
-        FilterMul(
-          ExpandMul(
-            GetNodeMatrix(Binding("a"), Some("fix.A"), 1),
-            GetEdgeMatrix(None, Some("fix.X"), false, 1),
-            0.125
-          ),
-          GetNodeMatrix(Binding("b"), Some("fix.B"), 4),
-          0.5714285714285714
+      FilterMul(
+        ExpandMul(
+          GetNodeMatrix(Binding("a"), Some("fix.A"), 1),
+          GetEdgeMatrix(None, Some("fix.X"), false, 4),
+          0.5
         ),
-        FilterMul(
-          GetEdgeMatrix(None, Some("fix.Y"), true, 4),
-          GetNodeMatrix(Binding("c"), Some("fix.C"), 1),
-          0.14285714285714285
+        Diag(
+          FilterMul(
+            ExpandMul(
+              GetNodeMatrix(Binding("c"), Some("fix.C"), 1),
+              GetEdgeMatrix(None, Some("fix.Y"), false, 4),
+              0.5
+            ),
+            GetNodeMatrix(Binding("b"), Some("fix.B"), 4),
+            0.5714285714285714
+          )
         ),
         1.0
       )
 
-    io.flatMap { case (plan, memo) =>
-        IO {
-          println(plan.show(memo))
-          assertEquals(plan, expected)
-          assertEquals(plan.output, Vector[Name](Binding("a"), Binding("c")))
-        }
+    io.flatMap {
+        case (plan, memo) =>
+          IO {
+            println(plan.show(memo))
+            assertEquals(plan, expected)
+            assertEquals(plan.output, Vector[Name](Binding("a"), Binding("b")))
+          }
       }
       .unsafeRunSync()
 

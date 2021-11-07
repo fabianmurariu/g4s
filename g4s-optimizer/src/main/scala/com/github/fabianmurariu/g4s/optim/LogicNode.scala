@@ -13,44 +13,19 @@ abstract class LogicNode(
     case node                  => node
   }
 
-  def signature: String = this match {
-    // These two are equivalent
-    case Filter(Expand(from, to, transpose), filter) =>
-      val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
-      s"PathStep(${from.signature},${edgeSign},${filter.signature})"
-    case Expand(from, Filter(to, filter), transpose) =>
-      val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
-      s"PathStep(${from.signature},${edgeSign},${filter.signature})"
+  // TODO: this needs some thought
+  def signature = id.hashCode()
 
-    // These two are equivalent but with LogicMemoRefV2 in between
-    case Filter(LogicMemoRefV2(Expand(from, to, transpose)), filter) =>
-      val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
-      s"PathStep(${from.signature},${edgeSign},${filter.signature})"
-    case Expand(from, LogicMemoRefV2(Filter(to, filter)), transpose) =>
-      val edgeSign = if (transpose) s"<${to.signature}" else s"${to.signature}>"
-      s"PathStep(${from.signature},${edgeSign},${filter.signature})"
-
-    case LogicMemoRefV2(logic) => logic.signature
-    case node: GetNodes        => node.toString()
-    case node: GetEdges        => node.toString()
-    case Expand(from, to, transpose) =>
-      s"Expand(${from.signature},${to.signature},$transpose)"
+  def id: Set[Any] = this match {
+    case LogicMemoRefV2(logic) => logic.id
+    case node: GetNodes        => node.label.toSet
+    case edges: GetEdges       => edges.tpe.toSet
+    case Expand(from, to, _)   => Set("expand") ++ from.id ++ to.id
     case Filter(frontier, filter) =>
-      s"Filter(${frontier.signature},${filter.signature})"
-    case Join(on, nodes) =>
-      s"Join($on, [${nodes.map(_.signature).toSet.mkString(",")}]"
+      Set("filter") ++ frontier.id ++ filter.id
+    case Join(expr, cont, _) =>
+      Set("join") ++ expr.id ++ cont.id
   }
-
-  def signatureV2:Long= this match {
-    case LogicMemoRefV2(logic) => logic.signatureV2
-    case node: GetNodes        => node.hashCode().toLong
-    case node: GetEdges        => node.hashCode().toLong
-    case Expand(from, to, _) =>
-      from.signatureV2 ^ to.signatureV2
-    case Filter(frontier, filter) =>
-      frontier.signatureV2 ^ filter.signatureV2
-  }
-
 }
 
 sealed abstract class ForkNode(
@@ -60,9 +35,14 @@ sealed abstract class ForkNode(
   def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode
 }
 
-case class GetNodes(label: Seq[String], sorted: Option[Name] = None)
+case class GetNodes(label: Option[String], sorted: Option[Name] = None)
     extends LogicNode(ArrayBuffer.empty[LogicNode]) {
   def output: Seq[Name] = sorted.toSeq
+}
+
+object GetNodes{
+  def apply(label:String, binding:String) =
+    new GetNodes(Some(label),Some(Binding(binding)))
 }
 
 case class GetEdges(
@@ -91,7 +71,7 @@ case class Filter(frontier: LogicNode, filter: LogicNode)
 }
 
 // join multiple logic nodes
-case class JoinPath(
+case class Join(
     expr: LogicNode, // this is the expr to hold on to
     cont: LogicNode,
     on: Name
@@ -99,20 +79,7 @@ case class JoinPath(
   def output: Seq[Name] = Seq(expr, cont).map(_.output).reduce(_ ++ _)
 
   override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
-    JoinPath(children(0), children(1), on)
-}
-
-// join two branches into a top node
-case class Join(
-    on: LogicNode, // root of this tree
-    cs: Vector[LogicNode] // children
-) extends ForkNode(cs.to(ArrayBuffer)) {
-
-  override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
-    Join(on, children)
-
-  override def output: Seq[Name] = children.flatMap(_.output).toSeq
-
+    Join(children(0), children(1), on)
 }
 
 case class LogicMemoRefV2(logic: LogicNode)
@@ -164,7 +131,7 @@ object LogicNode {
       val edges = GetEdges(edge.types, t)
 
       val right = Filter(Expand(from, edges, true), to)
-      JoinPath(
+      Join(
         expr = from,
         cont = right,
         on = from.output.head
@@ -190,19 +157,25 @@ object LogicNode {
           // we only have one edge between the root and the child is in the return set
           logicalJoinPath(child, edge, root, seen)
         case cs =>
-          val to = GetNodes(root.labels, Some(root.name))
+          // val to = GetNodes(root.labels, Some(root.name))
 
-          val childrenExpr = cs.map {
+          val childrenExpr: Vector[LogicNode] = cs.map {
             case (child, edge) if qg.isReturn(child) =>
               logicalJoinPath(child, edge, root, seen)
             case (child, edge) if !qg.isReturn(child) =>
               logicalExpand(child, edge, root, seen)
           }
 
-          Join(
-            on = to,
-            cs = childrenExpr.toVector
-          )
+          // split into things that can be joined and things that can be
+          childrenExpr.tail.foldLeft(childrenExpr.head) {
+            case (chain: Filter, next: Filter) =>
+              chain.copy(filter = next)
+            case (chain: Join, next: Join) =>
+              Join(chain, next, chain.on)
+            case (chain@ Join(_, cont:Filter, _), next: Filter) =>
+              Join(expr = chain, cont = next.copy(filter = cont), on = root.name)
+          }
+
       }
     }
 

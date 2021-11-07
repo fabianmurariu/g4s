@@ -57,6 +57,6 @@ trait Actor[T] extends (MatMsg[T] => IO[Unit]) { self =>
   def mailbox: Queue[IO, MatMsg[T]]
 
   def receiveLoop: IO[Unit] =
-    mailbox.take.flatMap(self.apply).flatMap(_ => IO.delay(println("Here we go again!")) *> receiveLoop)
+    mailbox.take.flatMap(self.apply).flatMap(_ => receiveLoop)
 
 }

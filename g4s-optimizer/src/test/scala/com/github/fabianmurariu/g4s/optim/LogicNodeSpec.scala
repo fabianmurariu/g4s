@@ -7,120 +7,134 @@ class LogicNodeSpec extends munit.FunSuite {
   test("signature equality of Filter Expand with Expand Filter") {
     val filter = Filter(
       Expand(
-        from = GetNodes(List("a"), Some(Binding("a"))),
+        from = GetNodes("A", "a"),
         to = GetEdges(List("X")),
         transposed = false
       ),
-      GetNodes(List("b"), Some(Binding("b")))
+      GetNodes("B", "b")
     )
     val expand = Expand(
-      GetNodes(List("a"), Some(Binding("a"))),
+      GetNodes("A", "a"),
       Filter(
         GetEdges(List("X")),
-        GetNodes(List("b"), Some(Binding("b")))
+        GetNodes("B", "b")
       ),
       transposed = false
     )
 
-    assertEquals(filter.signatureV2, expand.signatureV2)
+    assertEquals(filter.signature, expand.signature)
   }
 
   test("signature equality nested Filter with Expand 1") {
 
     val fork1 = Filter(
       Expand(
-        from = GetNodes(List("a"), Some(Binding("a"))),
+        from = GetNodes("a", "a"),
         to = GetEdges(List("X")),
         transposed = false
       ),
       Filter(
         Expand(
-          from = GetNodes(List("c"), Some(Binding("c"))),
+          from = GetNodes("c", "c"),
           to = GetEdges(List("Y")),
           transposed = false
         ),
-        GetNodes(List("b"), Some(Binding("b")))
+        GetNodes("b", "b")
       )
     )
 
     val fork2 = Filter(
       Expand(
-        from = GetNodes(List("c"), Some(Binding("c"))),
+        from = GetNodes("c", "c"),
         to = GetEdges(List("Y")),
         transposed = false
       ),
       Filter(
         Expand(
-          from = GetNodes(List("a"), Some(Binding("a"))),
+          from = GetNodes("a", "a"),
           to = GetEdges(List("X")),
           transposed = false
         ),
-        GetNodes(List("b"), Some(Binding("b")))
+        GetNodes("b", "b")
       )
     )
 
-    assertEquals(fork1.signatureV2, fork2.signatureV2)
+    assertEquals(fork1.id(0), fork2.id(0))
+    assertEquals(fork1.signature, fork2.signature)
+  }
+
+  test("Filter and Expand do not have the same signature") {
+    val expand = Expand(
+      from = GetNodes("a", "a"),
+      to = GetEdges(List("X")),
+      transposed = false
+    )
+
+    val filter =
+      Filter(GetEdges(List("X")), GetNodes("a", "a"))
+
+    assertNotEquals(expand.signature, filter.signature)
   }
 
   test("signature equality nested Filter with Expand 2") {
 
     val fork1 = Filter(
       Expand(
-        from = GetNodes(List("a"), Some(Binding("a"))),
+        from = GetNodes("a", "a"),
         to = GetEdges(List("X")),
         transposed = false
       ),
       Filter(
         Expand(
-          from = GetNodes(List("c"), Some(Binding("c"))),
+          from = GetNodes("c", "c"),
           to = GetEdges(List("Y")),
           transposed = false
         ),
-        GetNodes(List("b"), Some(Binding("b")))
+        GetNodes("b", "b")
       )
     )
 
     val fork2 = Filter(
       Expand(
-        from = GetNodes(List("c"), Some(Binding("c"))),
+        from = GetNodes("c", "c"),
         to = GetEdges(List("Y")),
         transposed = false
       ),
       Filter(
         Expand(
-          from = GetNodes(List("a"), Some(Binding("a"))),
+          from = GetNodes("a", "a"),
           to = GetEdges(List("X")),
           transposed = false
         ),
-        GetNodes(List("b"), Some(Binding("b")))
+        GetNodes("b", "b")
       )
     )
 
     val fork3 = Expand(
-      from = GetNodes(List("a"), Some(Binding("a"))),
+      from = GetNodes("a", "a"),
       to = Filter(
         GetEdges(List("X")),
         Filter(
           Expand(
-            from = GetNodes(List("c"), Some(Binding("c"))),
+            from = GetNodes("c", "c"),
             to = GetEdges(List("Y")),
             transposed = false
           ),
-          GetNodes(List("b"), Some(Binding("b")))
+          GetNodes("b", "b")
         )
       ),
       transposed = false
     )
 
     val fork4 = Expand(
-      from = GetNodes(List("a"), Some(Binding("a"))),
+      from = GetNodes("a", "a"),
       to = Filter(
         GetEdges(List("X")),
         Expand(
-          from = GetNodes(List("c"), Some(Binding("c"))),
+          from = GetNodes("c", "c"),
           to = Filter(
             GetEdges(List("Y")),
-            GetNodes(List("b"), Some(Binding("b")))
+            GetNodes("b", "b")
           ),
           transposed = false
         )
@@ -128,9 +142,13 @@ class LogicNodeSpec extends munit.FunSuite {
       transposed = false
     )
 
-    assertEquals(fork1.signatureV2, fork2.signatureV2)
-    assertEquals(fork2.signatureV2, fork3.signatureV2)
-    assertEquals(fork3.signatureV2, fork4.signatureV2)
+    assertEquals(fork1.id(0), fork2.id(0))
+    assertEquals(fork2.id(0), fork3.id(0))
+    assertEquals(fork3.id(0), fork4.id(0))
+
+    assertEquals(fork1.signature, fork2.signature)
+    assertEquals(fork2.signature, fork3.signature)
+    assertEquals(fork3.signature, fork4.signature)
   }
 
   test("parse one hop path from cypher and generate query graph") {
@@ -247,16 +265,16 @@ class LogicNodeSpec extends munit.FunSuite {
         Expand(
           Filter(
             Expand(
-              GetNodes(Seq("A"), Some(Binding("a"))),
+              GetNodes("A", "a"),
               GetEdges(Seq("X")),
               false
             ),
-            GetNodes(Seq("C"), Some(Binding("c")))
+            GetNodes("C", "c")
           ),
           GetEdges(Seq("Y")),
           false
         ),
-        GetNodes(Seq("D"), Some(Binding("d")))
+        GetNodes("D", "d")
       )
 
     assertEquals(actual, expected)
@@ -273,28 +291,44 @@ class LogicNodeSpec extends munit.FunSuite {
     val Right(queryGraph) = QueryGraph.fromCypherText(query)
 
     val Right(actual) = LogicNode.fromQueryGraph(queryGraph)(Binding("c"))
-
-    val expected = Join(
-      GetNodes(Seq("C"), Some(Binding("c"))),
-      Vector(
-        Filter(
-          Expand(
-            GetNodes(Seq("D"), Some(Binding("d"))),
-            GetEdges(Seq("Y"), transpose = true),
-            true
-          ),
-          GetNodes(Seq("C"), Some(Binding("c")))
+    val expected = Filter(
+      Expand(
+        GetNodes("D", "d"),
+        GetEdges(Seq("Y"), transpose = true),
+        true
+      ),
+      Filter(
+        Expand(
+          GetNodes("A", "a"),
+          GetEdges(Seq("X")),
+          false
         ),
-        Filter(
-          Expand(
-            GetNodes(Seq("A"), Some(Binding("a"))),
-            GetEdges(Seq("X")),
-            false
-          ),
-          GetNodes(Seq("C"), Some(Binding("c")))
-        )
+        GetNodes("C", "c")
       )
     )
+
+    // in case we use join again
+    // val expected = Join(
+    //   GetNodes(Seq("C"), Some(Binding("c"))),
+    //   Vector(
+    //     Filter(
+    //       Expand(
+    //         GetNodes(Seq("D"), Some(Binding("d"))),
+    //         GetEdges(Seq("Y"), transpose = true),
+    //         true
+    //       ),
+    //       GetNodes(Seq("C"), Some(Binding("c")))
+    //     ),
+    //     Filter(
+    //       Expand(
+    //         GetNodes(Seq("A"), Some(Binding("a"))),
+    //         GetEdges(Seq("X")),
+    //         false
+    //       ),
+    //       GetNodes(Seq("C"), Some(Binding("c")))
+    //     )
+    //   )
+    // )
 
     assertEquals(actual, expected)
     assertEquals(actual.output.contains(Binding("c")), true)
@@ -312,29 +346,33 @@ class LogicNodeSpec extends munit.FunSuite {
 
     val Right(actual) = LogicNode.fromQueryGraph(queryGraph)(Binding("c"))
 
-    println(actual)
     val expected = Join(
-      GetNodes(Seq("C"), Some(Binding("c"))),
-      Vector(
-        JoinPath(
-          GetNodes(Seq("D"), Some(Binding("d"))),
-          Filter(
-            Expand(
-              GetNodes(Seq("D"), Some(Binding("d"))),
-              GetEdges(Seq("Y"), transpose = true),
-              true
-            ),
-            GetNodes(Seq("C"), Some(Binding("c")))
-          ),
-          on = Binding("d")
-        ),
-        Filter(
+      on = Binding("c"),
+      expr = Join(
+        expr = GetNodes("D", "d"),
+        cont = Filter(
           Expand(
-            GetNodes(Seq("A"), Some(Binding("a"))),
-            GetEdges(Seq("X")),
-            false
+            GetNodes("D", "d"),
+            GetEdges(Seq("Y"), transpose = true),
+            true
           ),
-          GetNodes(Seq("C"), Some(Binding("c")))
+          GetNodes("C", "c")
+        ),
+        on = Binding("d")
+      ),
+      cont = Filter(
+        frontier = Expand(
+          GetNodes("A", "a"),
+          GetEdges(Seq("X")),
+          false
+        ),
+        filter = Filter(
+          Expand(
+            GetNodes("D", "d"),
+            GetEdges(Seq("Y"), transpose = true),
+            true
+          ),
+          GetNodes("C", "c")
         )
       )
     )

@@ -6,8 +6,8 @@ import scala.collection.immutable.Queue
 
 case class MemoV2(
     rootPlans: Map[Binding, LogicNode],
-    queue: Queue[String] = Queue.empty[String],
-    table: Map[String, GroupV2] = Map.empty[String, GroupV2]
+    queue: Queue[Int] = Queue.empty[Int],
+    table: Map[Int, GroupV2] = Map.empty[Int, GroupV2]
 )
 
 object MemoV2 {
@@ -97,7 +97,7 @@ object MemoV2 {
     memo
   }
 
-  def optimPhysicalPlan(m: MemoV2)(signature: String): Option[op.Operator] = {
+  def optimPhysicalPlan(m: MemoV2)(signature: Int): Option[op.Operator] = {
     val group = m.table(signature) // yes we can blow up if we don't have the signature
     // GroupV2.optim(group, m).optMember.map(_.plan).flatMap(deRef)
     group.optMember.collect {
