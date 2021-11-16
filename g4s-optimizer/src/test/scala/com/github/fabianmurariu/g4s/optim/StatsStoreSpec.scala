@@ -4,8 +4,6 @@ import munit.ScalaCheckSuite
 import org.scalacheck.Prop._
 import org.scalacheck.Gen
 import org.scalacheck.Arbitrary
-import cats.Traverse
-import cats.effect.unsafe.IORuntime
 
 class StatsStoreSpec extends ScalaCheckSuite {
 
@@ -125,29 +123,6 @@ class StatsStoreSpec extends ScalaCheckSuite {
         eqAprox(selYB, 0.5d) &&
         totals == ((1000L, 500L, 500L, 500L, 500L, 1000L))
       }
-
-    // val io = for {
-    //   ss <- StatsStore()
-    //   _ <- Traverse[Vector].foldM(sample.vs, ss) {
-    //     case (ss, (src, edge, dst)) =>
-    //       for {
-    //         s1 <- ss.addNode(src)
-    //         s2 <- s1.addNode(dst)
-    //         s3 <- s2.addTriplet(src, edge, dst)
-    //       } yield s3
-    //   }
-    // } yield (
-    //   ,
-    //   selA,
-    //   selB,
-    //   selAX,
-    //   selAY,
-    //   selXB,
-    //   selYB
-    // )
-
-    // val res @ (totals, selA, selB, selAX, selAY, selXB, selYB) =
-    //   io.unsafeRunSync()(IORuntime.global)
 
     }
   }

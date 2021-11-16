@@ -110,9 +110,9 @@ object Operator {
   def relativeCost(m: MemoV2, op: Operator): (Double, Long) = op match {
     case RefOperator(logic) =>
       m.table(logic.signature).optMember match {
-        case Some(CostedGroupMember(_, _, cost, card)) =>
+        case Some(CostedGroupMember(_, _, cost, card, _)) =>
           (cost, card)
-        case Some(EvaluatedGroupMember(_, plan)) =>
+        case Some(EvaluatedGroupMember(_, plan, _)) =>
           relativeCost(m, plan)
         case _ =>
           throw new IllegalStateException(

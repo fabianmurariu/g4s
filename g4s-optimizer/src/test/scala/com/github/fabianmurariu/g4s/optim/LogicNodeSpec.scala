@@ -8,8 +8,7 @@ class LogicNodeSpec extends munit.FunSuite {
     val filter = Filter(
       Expand(
         from = GetNodes("A", "a"),
-        to = GetEdges(List("X")),
-        transposed = false
+        to = GetEdges(List("X"))
       ),
       GetNodes("B", "b")
     )
@@ -18,8 +17,7 @@ class LogicNodeSpec extends munit.FunSuite {
       Filter(
         GetEdges(List("X")),
         GetNodes("B", "b")
-      ),
-      transposed = false
+      )
     )
 
     assertEquals(filter.signature, expand.signature)
@@ -28,33 +26,17 @@ class LogicNodeSpec extends munit.FunSuite {
   test("signature equality nested Filter with Expand 1") {
 
     val fork1 = Filter(
-      Expand(
-        from = GetNodes("a", "a"),
-        to = GetEdges(List("X")),
-        transposed = false
-      ),
+      Expand(from = GetNodes("a", "a"), to = GetEdges(List("X"))),
       Filter(
-        Expand(
-          from = GetNodes("c", "c"),
-          to = GetEdges(List("Y")),
-          transposed = false
-        ),
+        Expand(from = GetNodes("c", "c"), to = GetEdges(List("Y"))),
         GetNodes("b", "b")
       )
     )
 
     val fork2 = Filter(
-      Expand(
-        from = GetNodes("c", "c"),
-        to = GetEdges(List("Y")),
-        transposed = false
-      ),
+      Expand(from = GetNodes("c", "c"), to = GetEdges(List("Y"))),
       Filter(
-        Expand(
-          from = GetNodes("a", "a"),
-          to = GetEdges(List("X")),
-          transposed = false
-        ),
+        Expand(from = GetNodes("a", "a"), to = GetEdges(List("X"))),
         GetNodes("b", "b")
       )
     )
@@ -64,11 +46,7 @@ class LogicNodeSpec extends munit.FunSuite {
   }
 
   test("Filter and Expand do not have the same signature") {
-    val expand = Expand(
-      from = GetNodes("a", "a"),
-      to = GetEdges(List("X")),
-      transposed = false
-    )
+    val expand = Expand(from = GetNodes("a", "a"), to = GetEdges(List("X")))
 
     val filter =
       Filter(GetEdges(List("X")), GetNodes("a", "a"))
@@ -79,33 +57,17 @@ class LogicNodeSpec extends munit.FunSuite {
   test("signature equality nested Filter with Expand 2") {
 
     val fork1 = Filter(
-      Expand(
-        from = GetNodes("a", "a"),
-        to = GetEdges(List("X")),
-        transposed = false
-      ),
+      Expand(from = GetNodes("a", "a"), to = GetEdges(List("X"))),
       Filter(
-        Expand(
-          from = GetNodes("c", "c"),
-          to = GetEdges(List("Y")),
-          transposed = false
-        ),
+        Expand(from = GetNodes("c", "c"), to = GetEdges(List("Y"))),
         GetNodes("b", "b")
       )
     )
 
     val fork2 = Filter(
-      Expand(
-        from = GetNodes("c", "c"),
-        to = GetEdges(List("Y")),
-        transposed = false
-      ),
+      Expand(from = GetNodes("c", "c"), to = GetEdges(List("Y"))),
       Filter(
-        Expand(
-          from = GetNodes("a", "a"),
-          to = GetEdges(List("X")),
-          transposed = false
-        ),
+        Expand(from = GetNodes("a", "a"), to = GetEdges(List("X"))),
         GetNodes("b", "b")
       )
     )
@@ -115,15 +77,10 @@ class LogicNodeSpec extends munit.FunSuite {
       to = Filter(
         GetEdges(List("X")),
         Filter(
-          Expand(
-            from = GetNodes("c", "c"),
-            to = GetEdges(List("Y")),
-            transposed = false
-          ),
+          Expand(from = GetNodes("c", "c"), to = GetEdges(List("Y"))),
           GetNodes("b", "b")
         )
-      ),
-      transposed = false
+      )
     )
 
     val fork4 = Expand(
@@ -135,11 +92,9 @@ class LogicNodeSpec extends munit.FunSuite {
           to = Filter(
             GetEdges(List("Y")),
             GetNodes("b", "b")
-          ),
-          transposed = false
+          )
         )
-      ),
-      transposed = false
+      )
     )
 
     assertEquals(fork1.id(0), fork2.id(0))
@@ -266,13 +221,11 @@ class LogicNodeSpec extends munit.FunSuite {
           Filter(
             Expand(
               GetNodes("A", "a"),
-              GetEdges(Seq("X")),
-              false
+              GetEdges(Seq("X"))
             ),
             GetNodes("C", "c")
           ),
-          GetEdges(Seq("Y")),
-          false
+          GetEdges(Seq("Y"))
         ),
         GetNodes("D", "d")
       )
@@ -294,14 +247,12 @@ class LogicNodeSpec extends munit.FunSuite {
     val expected = Filter(
       Expand(
         GetNodes("D", "d"),
-        GetEdges(Seq("Y"), transpose = true),
-        true
+        GetEdges(Seq("Y"), transpose = true)
       ),
       Filter(
         Expand(
           GetNodes("A", "a"),
-          GetEdges(Seq("X")),
-          false
+          GetEdges(Seq("X"))
         ),
         GetNodes("C", "c")
       )
@@ -353,8 +304,7 @@ class LogicNodeSpec extends munit.FunSuite {
         cont = Filter(
           Expand(
             GetNodes("D", "d"),
-            GetEdges(Seq("Y"), transpose = true),
-            true
+            GetEdges(Seq("Y"), transpose = true)
           ),
           GetNodes("C", "c")
         ),
@@ -363,14 +313,12 @@ class LogicNodeSpec extends munit.FunSuite {
       cont = Filter(
         frontier = Expand(
           GetNodes("A", "a"),
-          GetEdges(Seq("X")),
-          false
+          GetEdges(Seq("X"))
         ),
         filter = Filter(
           Expand(
             GetNodes("D", "d"),
-            GetEdges(Seq("Y"), transpose = true),
-            true
+            GetEdges(Seq("Y"), transpose = true)
           ),
           GetNodes("C", "c")
         )

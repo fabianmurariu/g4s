@@ -63,6 +63,7 @@ class OptimSpec extends munit.FunSuite {
         case (plan, memo) =>
           IO {
             println(plan.show(memo))
+            assertEquals(plan.relativeCost(memo), expected.relativeCost(memo))
             assertEquals(plan, expected)
           }
       }

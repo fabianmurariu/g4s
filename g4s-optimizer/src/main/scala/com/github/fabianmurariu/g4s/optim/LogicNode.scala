@@ -20,7 +20,7 @@ abstract class LogicNode(
     case LogicMemoRefV2(logic) => logic.id
     case node: GetNodes        => node.label.toSet
     case edges: GetEdges       => edges.tpe.toSet
-    case Expand(from, to, _)   => Set("expand") ++ from.id ++ to.id
+    case Expand(from, to)   => Set("expand") ++ from.id ++ to.id
     case Filter(frontier, filter) =>
       Set("filter") ++ frontier.id ++ filter.id
     case Join(expr, cont, _) =>
@@ -53,11 +53,11 @@ case class GetEdges(
 }
 
 // (from)<-[:to]-
-case class Expand(from: LogicNode, to: LogicNode, transposed: Boolean)
+case class Expand(from: LogicNode, to: LogicNode)
     extends ForkNode(ArrayBuffer(from, to)) {
 
   override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
-    Expand(children(0), children(1), transposed)
+    Expand(children(0), children(1))
   def output: Seq[Name] = to.output
 }
 
@@ -116,7 +116,7 @@ object LogicNode {
 
       val to = GetNodes(root.labels, Some(root.name))
 
-      Filter(Expand(from, edges, t), to)
+      Filter(Expand(from, edges), to)
     }
 
     def logicalJoinPath(
@@ -130,7 +130,7 @@ object LogicNode {
       val to = GetNodes(root.labels, Some(root.name))
       val edges = GetEdges(edge.types, t)
 
-      val right = Filter(Expand(from, edges, true), to)
+      val right = Filter(Expand(from, edges), to)
       Join(
         expr = from,
         cont = right,

@@ -1,8 +1,24 @@
 package com.github.fabianmurariu.g4s.optim
 
 import scala.annotation.tailrec
+import com.github.fabianmurariu.g4s.optim.rules.Rule
+import com.github.fabianmurariu.g4s.optim.rules.trans.FilterExpandCommutative
+import com.github.fabianmurariu.g4s.optim.rules.impl.LoadEdges
+import com.github.fabianmurariu.g4s.optim.rules.impl.LoadNodes
+import com.github.fabianmurariu.g4s.optim.rules.impl.Filter2MxM
+import com.github.fabianmurariu.g4s.optim.rules.impl.Expand2MxM
+import com.github.fabianmurariu.g4s.optim.rules.impl.Fork2DiagFilter
 
 object Optimizer {
+
+  @tailrec
+  def memoLoop(rules: Vector[Rule])(m: MemoV2, ss: StatsStore): MemoV2 =
+    MemoV2.pop(m) match {
+      case None => m
+      case Some((grp, memo)) =>
+        memoLoop(rules)(MemoV2.exploreGroup(memo)(grp, rules, ss), ss)
+    }
+
   def optimizeV2(qg: QueryGraph, ss: StatsStore): MemoV2 = {
 
     val rootPlans: Map[Binding, LogicNode] = qg.returns
@@ -16,26 +32,18 @@ object Optimizer {
       MemoV2.doEnqueuePlan(m)(node)._1
     )
 
-    @tailrec
-    def loop(rules: Vector[rules2.Rule])(m: MemoV2): MemoV2 =
-      MemoV2.pop(m) match {
-        case None => m
-        case Some((grp, memo)) =>
-          loop(rules)(MemoV2.exploreGroup(memo)(grp, rules, ss))
-      }
-
-    loop(transformationRules ++ implementationRules)(memo)
+    memoLoop(transformationRules ++ implementationRules)(memo, ss)
   }
 
-  def transformationRules: Vector[rules2.Rule] = Vector(
-    new rules2.FilterExpandComutative
+  def transformationRules: Vector[Rule] = Vector(
+    new FilterExpandCommutative
   )
 
-  def implementationRules = Vector(
-    new rules2.LoadEdges,
-    new rules2.LoadNodes,
-    new rules2.Filter2MxM,
-    new rules2.Expand2MxM,
-    new rules2.TreeJoinDiagFilter
+  def implementationRules: Vector[Rule] = Vector(
+    new LoadEdges,
+    new LoadNodes,
+    new Filter2MxM,
+    new Expand2MxM,
+    new Fork2DiagFilter
   )
 }

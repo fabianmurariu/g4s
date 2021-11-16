@@ -5,13 +5,13 @@ import com.github.fabianmurariu.g4s.optim.{impls => op}
 import scala.collection.immutable.Queue
 
 case class MemoV2(
-    rootPlans: Map[Binding, LogicNode],
-    queue: Queue[Int] = Queue.empty[Int],
+    rootPlans: Map[Binding, LogicNode] = Map.empty,
+    stack: List[Int] = List.empty[Int],
     table: Map[Int, GroupV2] = Map.empty[Int, GroupV2]
 )
 
 object MemoV2 {
-  import rules2.Rule
+  import rules.Rule
 
   def bestPlan(m: MemoV2): op.Operator = {
 
@@ -26,28 +26,33 @@ object MemoV2 {
     deRefOperator(m)(best).get
   }
 
-  def pop(m: MemoV2): Option[(GroupV2, MemoV2)] =
-    m.queue.dequeueOption.map {
-      case (signature, rest) => m.table(signature) -> m.copy(queue = rest)
+  def pop(m: MemoV2): Option[(GroupV2, MemoV2)] = {
+    m.stack match {
+        case signature :: rest =>
+            Some(m.table(signature) -> m.copy(stack = rest))
+        case _ => None
     }
+//      m.queue.dequeueOption.map {
+//      case (signature, rest) => m.table(signature) -> m.copy(queue = rest)
+//    }
+  }
 
-  def insertLogic(m: MemoV2)(logic: LogicNode): (MemoV2, GroupV2) = {
+    def insertLogic(m: MemoV2)(logic: LogicNode): (MemoV2, GroupV2) = {
     val newGroup = GroupV2(logic)
     insertGroup(m)(newGroup)
   }
 
-  def updateGroup(m: MemoV2)(g: GroupV2) =
+  def updateGroup(m: MemoV2)(g: GroupV2): MemoV2 =
     m.copy(table = m.table + (g.logic.signature -> g))
 
-  def insertGroup(m: MemoV2)(newGroup: GroupV2) = {
+  def insertGroup(m: MemoV2)(newGroup: GroupV2): (MemoV2, GroupV2) = {
     val signature = newGroup.logic.signature
-    // val newTable = m.table + (signature -> newGroup)
     val newTable = m.table.updatedWith(signature) {
       case None => Some(newGroup)
       case Some(grp) =>
         Some(newGroup.copy(optMember = grp.optMember))
     }
-    val newQueue = m.queue.enqueue(signature)
+    val newQueue = signature :: m.stack //m.queue.enqueue(signature)
     MemoV2(m.rootPlans, newQueue, newTable) -> newGroup
   }
 
@@ -65,7 +70,7 @@ object MemoV2 {
               val (newMemo, childGroup) = doEnqueuePlan(memo)(child)
               (newMemo, children += LogicMemoRefV2(childGroup.logic))
           }
-        val newNode = node.rewireV2(childrenRef.result())
+        val newNode: LogicNode = node.rewireV2(childrenRef.result())
         insertLogic(memo)(newNode)
 
       case node if node.leaf =>
@@ -83,9 +88,9 @@ object MemoV2 {
     val processedNewMembers = Vector.newBuilder[GroupMember]
 
     val (newMemo, members) = newMembers.foldLeft((m, processedNewMembers)) {
-      case ((memo, b), UnEvaluatedGroupMember(logic, _)) =>
+      case ((memo, b), UnEvaluatedGroupMember(logic, appliedRules)) =>
         val (m, grp) = doEnqueuePlan(memo)(logic)
-        (m, b += UnEvaluatedGroupMember(grp.logic))
+        (m, b += UnEvaluatedGroupMember(grp.logic, appliedRules = appliedRules))
       case ((m, b), g: PhysicalPlanMember) =>
         (m, b += g)
     }
@@ -101,7 +106,7 @@ object MemoV2 {
     val group = m.table(signature) // yes we can blow up if we don't have the signature
     // GroupV2.optim(group, m).optMember.map(_.plan).flatMap(deRef)
     group.optMember.collect {
-      case CostedGroupMember(_, plan, _, _) => deRefOperator(m)(plan)
+      case gm:CostedGroupMember => deRefOperator(m)(gm.plan)
     }.flatten
 
   }
