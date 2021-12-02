@@ -20,7 +20,7 @@ abstract class LogicNode(
     case LogicMemoRefV2(logic) => logic.id
     case node: GetNodes        => node.label.toSet
     case edges: GetEdges       => edges.tpe.toSet
-    case Expand(from, to)   => Set("expand") ++ from.id ++ to.id
+    case Expand(from, to)      => Set("expand") ++ from.id ++ to.id
     case Filter(frontier, filter) =>
       Set("filter") ++ frontier.id ++ filter.id
     case Join(expr, cont, _) =>
@@ -40,9 +40,9 @@ case class GetNodes(label: Option[String], sorted: Option[Name] = None)
   def output: Seq[Name] = sorted.toSeq
 }
 
-object GetNodes{
-  def apply(label:String, binding:String) =
-    new GetNodes(Some(label),Some(Binding(binding)))
+object GetNodes {
+  def apply(label: String, binding: String) =
+    new GetNodes(Some(label), Some(Binding(binding)))
 }
 
 case class GetEdges(
@@ -88,6 +88,10 @@ case class LogicMemoRefV2(logic: LogicNode)
   override def output: Seq[Name] = plan.output
 
   def plan: LogicNode = children.next()
+}
+
+case class GroupRef(groupId: Int) extends LogicNode {
+  override def output: Seq[Name] = Seq.empty
 }
 
 object LogicNode {
@@ -172,8 +176,12 @@ object LogicNode {
               chain.copy(filter = next)
             case (chain: Join, next: Join) =>
               Join(chain, next, chain.on)
-            case (chain@ Join(_, cont:Filter, _), next: Filter) =>
-              Join(expr = chain, cont = next.copy(filter = cont), on = root.name)
+            case (chain @ Join(_, cont: Filter, _), next: Filter) =>
+              Join(
+                expr = chain,
+                cont = next.copy(filter = cont),
+                on = root.name
+              )
           }
 
       }

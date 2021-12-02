@@ -21,7 +21,8 @@ import com.github.fabianmurariu.g4s.optim.CostedGroupMember
   * base class for push operators
   * inspired by "How to Architect a Query Compiler, Revised" Ruby T Tahboub, et al.
   */
-trait Operator { self =>
+sealed abstract class Operator(val children: Vector[Operator] = Vector.empty) {
+  self =>
 
   def eval(eg: EvaluatorGraph)(cb: Record => IO[Unit])(
       implicit G: GRB
@@ -265,7 +266,7 @@ case class ExpandMul(
     frontier: Operator,
     edges: Operator,
     edgesSel: Double = 1.0d
-) extends Operator {
+) extends Operator(Vector(frontier, edges)) {
 
   lazy val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring //FIXME get rid of this
@@ -277,7 +278,8 @@ case class ExpandMul(
 
   def sorted: Option[Name] = frontier.sorted
 
-  def output: Seq[Name] = (frontier.output.headOption ++ edges.output.lastOption).toSeq
+  def output: Seq[Name] =
+    (frontier.output.headOption ++ edges.output.lastOption).toSeq
 
 }
 
@@ -285,7 +287,7 @@ case class FilterMul(
     frontier: Operator,
     filter: Operator,
     sel: Double
-) extends Operator {
+) extends Operator(Vector(frontier, filter)) {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
@@ -298,11 +300,12 @@ case class FilterMul(
 
   def sorted: Option[Name] = frontier.sorted
 
-  def output: Seq[Name] = (frontier.output.headOption ++ filter.output.lastOption).toSeq
+  def output: Seq[Name] =
+    (frontier.output.headOption ++ filter.output.lastOption).toSeq
 
 }
 
-case class Diag(op: Operator) extends Operator {
+case class Diag(op: Operator) extends Operator(Vector(op)) {
 
   def eval(
       eg: EvaluatorGraph
@@ -330,8 +333,7 @@ case class Diag(op: Operator) extends Operator {
 import scala.collection.mutable
 
 //FIXME: trivial renderer that will push every item onto a buffer
-case class MatrixTuples(op: Operator) extends Operator {
-
+case class MatrixTuples(op: Operator) extends Operator(Vector(op)) {
 
   def eval(
       eg: EvaluatorGraph
@@ -341,7 +343,9 @@ case class MatrixTuples(op: Operator) extends Operator {
         for {
           data <- rec.mat.extract
           (is, js, _) = data
-          buf: mutable.ArrayBuffer[(Long, Long)]= mutable.ArrayBuffer.from(is.zip(js))
+          buf: mutable.ArrayBuffer[(Long, Long)] = mutable.ArrayBuffer.from(
+            is.zip(js)
+          )
           _ <- cb(OutputRecord(buf))
         } yield ()
     }

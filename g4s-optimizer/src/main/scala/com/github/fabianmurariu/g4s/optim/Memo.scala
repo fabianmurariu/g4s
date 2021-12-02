@@ -6,7 +6,7 @@ import scala.collection.immutable.Queue
 
 case class MemoV2(
     rootPlans: Map[Binding, LogicNode] = Map.empty,
-    stack: List[Int] = List.empty[Int],
+    queue: Queue[Int] = Queue.empty[Int],
     table: Map[Int, GroupV2] = Map.empty[Int, GroupV2]
 )
 
@@ -27,17 +27,17 @@ object MemoV2 {
   }
 
   def pop(m: MemoV2): Option[(GroupV2, MemoV2)] = {
-    m.stack match {
-        case signature :: rest =>
-            Some(m.table(signature) -> m.copy(stack = rest))
-        case _ => None
-    }
-//      m.queue.dequeueOption.map {
-//      case (signature, rest) => m.table(signature) -> m.copy(queue = rest)
+//    m.stack match {
+//        case signature :: rest =>
+//            Some(m.table(signature) -> m.copy(stack = rest))
+//        case _ => None
 //    }
+    m.queue.dequeueOption.map {
+      case (signature, rest) => m.table(signature) -> m.copy(queue = rest)
+    }
   }
 
-    def insertLogic(m: MemoV2)(logic: LogicNode): (MemoV2, GroupV2) = {
+  def insertLogic(m: MemoV2)(logic: LogicNode): (MemoV2, GroupV2) = {
     val newGroup = GroupV2(logic)
     insertGroup(m)(newGroup)
   }
@@ -52,7 +52,8 @@ object MemoV2 {
       case Some(grp) =>
         Some(newGroup.copy(optMember = grp.optMember))
     }
-    val newQueue = signature :: m.stack //m.queue.enqueue(signature)
+//    val newQueue = signature :: m.stack //m.queue.enqueue(signature)
+    val newQueue = m.queue.enqueue(signature)
     MemoV2(m.rootPlans, newQueue, newTable) -> newGroup
   }
 
@@ -106,7 +107,7 @@ object MemoV2 {
     val group = m.table(signature) // yes we can blow up if we don't have the signature
     // GroupV2.optim(group, m).optMember.map(_.plan).flatMap(deRef)
     group.optMember.collect {
-      case gm:CostedGroupMember => deRefOperator(m)(gm.plan)
+      case gm: CostedGroupMember => deRefOperator(m)(gm.plan)
     }.flatten
 
   }
