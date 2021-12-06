@@ -7,6 +7,10 @@ case class GroupExpression(
     childGroups: Vector[Int],
     var groupId: Int = -1
 )(rulesApplied: mutable.BitSet = mutable.BitSet.empty) {
+
+  def hasRuleExplored(rule: Rule): Boolean =
+    rulesApplied(rule.id)
+
   def setGroupId(groupId: Int): Unit = {
     this.groupId = groupId
   }

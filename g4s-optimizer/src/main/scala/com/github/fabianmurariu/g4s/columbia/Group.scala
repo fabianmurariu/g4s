@@ -6,8 +6,14 @@ case class Group(
     var groupId: Int,
     physicalExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty,
     logicalExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty,
-    enforcedExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty
+    enforcedExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty,
+    var bestExpression: Option[GroupExpression],
+    private var explored: Boolean = false
 ) {
+  def setExplored(): Unit = explored = true
+
+  def isExplored: Boolean = explored
+
   def addExpression(gExpr: GroupExpression, enforced: Boolean): Unit = {
     gExpr.setGroupId(groupId)
     if (enforced) {

@@ -7,15 +7,16 @@ import scala.collection.mutable.ArrayBuffer
 
 case class Context(
     memo: Memo,
-    stack: mutable.ArrayDeque[OptimizerTask] = mutable.ArrayDeque.empty,
-    rule: Vector[Rule] = Vector.empty
+    stack: mutable.ArrayDeque[OptimiserTask] = mutable.ArrayDeque.empty,
+    transformationRules: Vector[Rule] = Vector.empty,
+    implementationRules: Vector[Rule] = Vector.empty
 ) {
-  def push(task: OptimizerTask): Context = {
+  def push(task: OptimiserTask): Context = {
     stack.append(task)
     this
   }
 
-  def pop(): Option[OptimizerTask] = {
+  def pop(): Option[OptimiserTask] = {
     stack.removeLastOption()
   }
 
