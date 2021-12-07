@@ -103,6 +103,10 @@ sealed abstract class Operator(val children: Vector[Operator] = Vector.empty) {
 
 sealed trait MatrixOperator extends Operator
 
+sealed abstract class ForkOperator(cs: Vector[Operator]) extends Operator(cs) {
+  def rewrite(children: Vector[Operator]): ForkOperator
+}
+
 object Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
@@ -266,7 +270,7 @@ case class ExpandMul(
     frontier: Operator,
     edges: Operator,
     edgesSel: Double = 1.0d
-) extends Operator(Vector(frontier, edges)) {
+) extends ForkOperator(Vector(frontier, edges)) {
 
   lazy val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring //FIXME get rid of this
@@ -281,13 +285,20 @@ case class ExpandMul(
   def output: Seq[Name] =
     (frontier.output.headOption ++ edges.output.lastOption).toSeq
 
+  override def rewrite(children: Vector[Operator]): ForkOperator =
+    ExpandMul(
+      children(0),
+      children(1),
+      edgesSel
+    ) // this is questionable, does the selectivity remain the same?, what is the edgesSel doing here?
+
 }
 
 case class FilterMul(
     frontier: Operator,
     filter: Operator,
     sel: Double
-) extends Operator(Vector(frontier, filter)) {
+) extends ForkOperator(Vector(frontier, filter)) {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
     Expand.staticAnyPairSemiring
@@ -303,9 +314,15 @@ case class FilterMul(
   def output: Seq[Name] =
     (frontier.output.headOption ++ filter.output.lastOption).toSeq
 
+  override def rewrite(children: Vector[Operator]): ForkOperator =
+    FilterMul(
+      children(0),
+      children(1),
+      sel
+    ) // this is questionable, does the selectivity remain the same?, what is the sel doing here?
 }
 
-case class Diag(op: Operator) extends Operator(Vector(op)) {
+case class Diag(op: Operator) extends ForkOperator(Vector(op)) {
 
   def eval(
       eg: EvaluatorGraph
@@ -328,6 +345,8 @@ case class Diag(op: Operator) extends Operator(Vector(op)) {
 
   def output: Seq[Name] = op.output.lastOption.toSeq
 
+  override def rewrite(children: Vector[Operator]): ForkOperator =
+    Diag(children(0))
 }
 
 import scala.collection.mutable

@@ -32,7 +32,7 @@ sealed abstract class ForkNode(
     cs: ArrayBuffer[LogicNode] = ArrayBuffer.empty
 ) extends LogicNode(cs) {
 
-  def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode
+  def rewireV2(children: Vector[LogicNode]): LogicNode
 }
 
 case class GetNodes(label: Option[String], sorted: Option[Name] = None)
@@ -56,7 +56,7 @@ case class GetEdges(
 case class Expand(from: LogicNode, to: LogicNode)
     extends ForkNode(ArrayBuffer(from, to)) {
 
-  override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
+  override def rewireV2(children: Vector[LogicNode]): LogicNode =
     Expand(children(0), children(1))
   def output: Seq[Name] = to.output
 }
@@ -66,7 +66,7 @@ case class Filter(frontier: LogicNode, filter: LogicNode)
     extends ForkNode(ArrayBuffer(frontier, filter)) {
   def output: Seq[Name] = filter.output
 
-  override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
+  override def rewireV2(children: Vector[LogicNode]): LogicNode =
     Filter(children(0), children(1))
 }
 
@@ -78,7 +78,7 @@ case class Join(
 ) extends ForkNode(ArrayBuffer(expr, cont)) {
   def output: Seq[Name] = Seq(expr, cont).map(_.output).reduce(_ ++ _)
 
-  override def rewireV2(children: Vector[LogicMemoRefV2]): LogicNode =
+  override def rewireV2(children: Vector[LogicNode]): LogicNode =
     Join(children(0), children(1), on)
 }
 

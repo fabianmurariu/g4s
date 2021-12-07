@@ -7,7 +7,7 @@ case class Group(
     physicalExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty,
     logicalExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty,
     enforcedExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty,
-    var bestExpression: Option[GroupExpression],
+    var bestExpression: Option[GroupExpression] = None,
     private var explored: Boolean = false
 ) {
   def setExplored(): Unit = explored = true

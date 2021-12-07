@@ -8,7 +8,13 @@ sealed trait OptimiserNode { self =>
     case LogicOptN(node)    => node.children.map(LogicOptN).toVector
     case PhysicalOptN(node) => node.children.map(PhysicalOptN)
   }
+
+  def content:Either[LogicNode, Operator]
 }
 
-case class LogicOptN(logic: LogicNode) extends OptimiserNode
-case class PhysicalOptN(physical: Operator) extends OptimiserNode
+case class LogicOptN(logic: LogicNode) extends OptimiserNode {
+  override def content: Either[LogicNode, Operator] = Left(logic)
+}
+case class PhysicalOptN(physical: Operator) extends OptimiserNode {
+  override def content: Either[LogicNode, Operator] = Right(physical)
+}
