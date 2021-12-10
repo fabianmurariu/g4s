@@ -1,7 +1,8 @@
 package com.github.fabianmurariu.g4s.columbia
 
 import com.github.fabianmurariu.g4s.optim.impls.ForkOperator
-import com.github.fabianmurariu.g4s.optim.{ForkNode, GroupRef}
+import com.github.fabianmurariu.g4s.optim.logic.GroupRef
+import com.github.fabianmurariu.g4s.optim.logic.{ForkNode, GroupRef}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.Breaks

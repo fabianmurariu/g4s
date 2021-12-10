@@ -90,11 +90,57 @@ class OptimiseExpressionCost(expr: GroupExpression) extends OptimiserTask {
   override def apply(ctx: Context): Unit = ???
 }
 
-class ApplyRule(rule: Rule, expr: GroupExpression, exploreOnly: Boolean = false)
-    extends OptimiserTask {
+class ApplyRule(
+    rule: Rule,
+    groupExpr: GroupExpression,
+    exploreOnly: Boolean = false
+) extends OptimiserTask {
   override def apply(ctx: Context): Unit = {
-    if (!expr.hasRuleExplored(rule)) {
-      val iterator = GroupExpressionBindingIterator(ctx.memo, expr, rule.pattern)
+    if (!groupExpr.hasRuleExplored(rule)) {
+      val iterator =
+        GroupExpressionBindingIterator(ctx.memo, groupExpr, rule.pattern)
+
+      while (iterator.hasNext) {
+        val gId = groupExpr.groupId
+        val node = iterator.next()
+        // we just assume the rule applies
+        val newExpressions = rule(node)
+        for (newExpr <- newExpressions) {
+
+          ctx.recordOptimiserNodeIntoGroup(newExpr, gId).foreach {
+            newGroupExpr =>
+              ctx.push(new DeriveStats(newGroupExpr))
+              if (newGroupExpr.isLogical) {
+                if (exploreOnly)
+                  ctx.push(new ExploreExpression(newGroupExpr))
+                else
+                  ctx.push(new OptimiseExpression(newGroupExpr))
+              } else {
+                ctx.push(new OptimiseExpressionCost(newGroupExpr))
+              }
+
+          }
+        }
+      }
+
+      groupExpr.setExplored(rule)
+    }
+  }
+}
+
+class DeriveStats(gExpr: GroupExpression) extends OptimiserTask {
+  private var childrenDerived:Boolean = false
+
+  override def apply(ctx: Context): Unit = {
+    if (!childrenDerived) {
+      childrenDerived = true
+      for (childGroupId <- gExpr.childGroups) {
+        val childGroupExpr = ctx.memo.getGroupById(childGroupId).logicalExprs.head
+        ctx.push(new DeriveStats(childGroupExpr))
+      }
+    } else {
+      StatsCalculator.calculateStats(gExpr, ctx)
+      gExpr.setStatsDerived()
     }
   }
 }

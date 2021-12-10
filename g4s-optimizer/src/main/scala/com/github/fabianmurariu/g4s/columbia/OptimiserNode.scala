@@ -1,7 +1,7 @@
 package com.github.fabianmurariu.g4s.columbia
 
-import com.github.fabianmurariu.g4s.optim.LogicNode
 import com.github.fabianmurariu.g4s.optim.impls.Operator
+import com.github.fabianmurariu.g4s.optim.logic.LogicNode
 
 sealed trait OptimiserNode { self =>
   def getChildren: Vector[OptimiserNode] = self match {

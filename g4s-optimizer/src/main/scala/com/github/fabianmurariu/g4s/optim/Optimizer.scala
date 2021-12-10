@@ -1,5 +1,7 @@
 package com.github.fabianmurariu.g4s.optim
 
+import com.github.fabianmurariu.g4s.optim.logic.LogicNode
+
 import scala.annotation.tailrec
 import com.github.fabianmurariu.g4s.optim.rules.Rule
 import com.github.fabianmurariu.g4s.optim.rules.trans.FilterExpandCommutative

@@ -1,4 +1,6 @@
-package com.github.fabianmurariu.g4s.optim
+package com.github.fabianmurariu.g4s.optim.logic
+
+import com.github.fabianmurariu.g4s.optim._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -96,8 +98,9 @@ case class GroupRef(groupId: Int) extends LogicNode {
 
 object LogicNode {
 
-  import scala.collection.mutable
   import DirectedGraph.ops._
+
+  import scala.collection.mutable
 
   def fromQueryGraph(
       qg: QueryGraph
@@ -135,7 +138,7 @@ object LogicNode {
       val edges = GetEdges(edge.types, t)
 
       val right = Filter(Expand(from, edges), to)
-      Join(
+      logic.Join(
         expr = from,
         cont = right,
         on = from.output.head

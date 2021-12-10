@@ -8,8 +8,20 @@ case class Group(
     logicalExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty,
     enforcedExprs: ArrayBuffer[GroupExpression] = ArrayBuffer.empty,
     var bestExpression: Option[GroupExpression] = None,
-    private var explored: Boolean = false
+    private var explored: Boolean = false,
+    var estNumRows: Option[Long] = None,
+    var estSelectivity: Option[Double] = Some(1d)
 ) {
+
+  def setCardinality(numNodes: Long): Unit =
+    estNumRows = Some(numNodes)
+
+  def setSelectivity(sel: Double): Unit =
+    estSelectivity = Some(sel)
+
+  def isEstimated: Boolean =
+    estNumRows.isDefined && estSelectivity.isDefined
+
   def setExplored(): Unit = explored = true
 
   def isExplored: Boolean = explored

@@ -1,6 +1,7 @@
 package com.github.fabianmurariu.g4s.optim
 
 import com.github.fabianmurariu.g4s.optim.impls.Operator
+import com.github.fabianmurariu.g4s.optim.logic.LogicNode
 
 case class GroupV2(
     logic: LogicNode,

@@ -1,12 +1,14 @@
 package com.github.fabianmurariu.g4s.columbia
 
-import com.github.fabianmurariu.g4s.optim.GroupRef
+import com.github.fabianmurariu.g4s.optim.StatsStore
+import com.github.fabianmurariu.g4s.optim.logic.GroupRef
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 case class Context(
     memo: Memo,
+    stats: StatsStore,
     stack: mutable.ArrayDeque[OptimiserTask] = mutable.ArrayDeque.empty,
     transformationRules: Vector[Rule] = Vector.empty,
     implementationRules: Vector[Rule] = Vector.empty

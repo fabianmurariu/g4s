@@ -1,7 +1,8 @@
 package com.github.fabianmurariu.g4s.columbia
 
-import com.github.fabianmurariu.g4s.optim.{LogicNode, QueryGraph}
+import com.github.fabianmurariu.g4s.optim.{QueryGraph, StatsStore}
 import com.github.fabianmurariu.g4s.optim.impls.Operator
+import com.github.fabianmurariu.g4s.optim.logic.LogicNode
 
 class Optimiser {
 
@@ -30,11 +31,12 @@ class Optimiser {
 
   def chooseBestPlan(
       rootPlan: LogicNode,
-      qg: QueryGraph
+      qg: QueryGraph,
+      ss: StatsStore
   ): Either[OptimiserError, Operator] = {
     val optimNode = LogicOptN(rootPlan)
     val memo = new Memo()
-    val context = new Context(memo)
+    val context = new Context(memo, ss)
     val rootExpr = context.recordOptimiserNodeIntoGroup(optimNode)
 
     rootExpr match {
@@ -53,5 +55,9 @@ case object FailedToRecordOptimiserNode
     extends OptimiserError(
       "failed to record logic node into optimiser, time to panic!"
     )
+
 case object FailedToOptimisePlan
     extends OptimiserError("Failed to optimise logic node")
+
+case object DeriveStatsError
+    extends OptimiserError("Unable to derive stats for physical plan")

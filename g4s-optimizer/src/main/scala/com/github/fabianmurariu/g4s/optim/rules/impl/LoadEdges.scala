@@ -4,8 +4,8 @@ import com.github.fabianmurariu.g4s.optim.{impls => op}
 import com.github.fabianmurariu.g4s.optim.rules.ImplementationRule
 import com.github.fabianmurariu.g4s.optim.GroupMember
 import com.github.fabianmurariu.g4s.optim.StatsStore
-import com.github.fabianmurariu.g4s.optim.GetEdges
 import com.github.fabianmurariu.g4s.optim.EvaluatedGroupMember
+import com.github.fabianmurariu.g4s.optim.logic.GetEdges
 
 class LoadEdges extends ImplementationRule {
 

@@ -1,5 +1,7 @@
 package com.github.fabianmurariu.g4s.optim
 
+import com.github.fabianmurariu.g4s.optim.logic.{Expand, Filter, GetEdges, GetNodes, LogicMemoRefV2}
+
 import scala.collection.immutable.Queue
 
 trait MemoFixtures {

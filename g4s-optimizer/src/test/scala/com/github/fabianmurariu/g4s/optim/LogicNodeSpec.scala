@@ -1,6 +1,7 @@
 package com.github.fabianmurariu.g4s.optim
 
 import DirectedGraph.ops._
+import com.github.fabianmurariu.g4s.optim.logic.{Expand, Filter, GetEdges, GetNodes, Join, LogicNode}
 
 class LogicNodeSpec extends munit.FunSuite {
 
@@ -297,7 +298,7 @@ class LogicNodeSpec extends munit.FunSuite {
 
     val Right(actual) = LogicNode.fromQueryGraph(queryGraph)(Binding("c"))
 
-    val expected = Join(
+    val expected = logic.Join(
       on = Binding("c"),
       expr = Join(
         expr = GetNodes("D", "d"),

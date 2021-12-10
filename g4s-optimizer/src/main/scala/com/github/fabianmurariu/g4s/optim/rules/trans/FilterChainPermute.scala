@@ -2,9 +2,8 @@ package com.github.fabianmurariu.g4s.optim.rules.trans
 
 import com.github.fabianmurariu.g4s.optim.{GroupMember, StatsStore}
 import com.github.fabianmurariu.g4s.optim.rules.TransformationRule
-import com.github.fabianmurariu.g4s.optim.Filter
-import com.github.fabianmurariu.g4s.optim.LogicMemoRefV2
 import com.github.fabianmurariu.g4s.optim.UnEvaluatedGroupMember
+import com.github.fabianmurariu.g4s.optim.logic.{Filter, LogicMemoRefV2}
 
 class FilterChainPermute extends TransformationRule { self =>
 

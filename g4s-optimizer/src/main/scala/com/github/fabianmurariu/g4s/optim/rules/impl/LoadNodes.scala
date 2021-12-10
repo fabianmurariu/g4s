@@ -5,8 +5,8 @@ import com.github.fabianmurariu.g4s.optim.rules.ImplementationRule
 import com.github.fabianmurariu.g4s.optim.GroupMember
 import com.github.fabianmurariu.g4s.optim.StatsStore
 import com.github.fabianmurariu.g4s.optim.EvaluatedGroupMember
-import com.github.fabianmurariu.g4s.optim.GetNodes
 import com.github.fabianmurariu.g4s.optim.UnNamed
+import com.github.fabianmurariu.g4s.optim.logic.GetNodes
 
 class LoadNodes extends ImplementationRule {
 

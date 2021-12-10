@@ -1,7 +1,9 @@
 package com.github.fabianmurariu.g4s.optim
 
 import cats.implicits._
+import com.github.fabianmurariu.g4s.optim.logic.{ForkNode, LogicMemoRefV2, LogicNode}
 import com.github.fabianmurariu.g4s.optim.{impls => op}
+
 import scala.collection.immutable.Queue
 
 case class MemoV2(

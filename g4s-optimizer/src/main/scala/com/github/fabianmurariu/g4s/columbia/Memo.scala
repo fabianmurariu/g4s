@@ -1,6 +1,6 @@
 package com.github.fabianmurariu.g4s.columbia
 
-import com.github.fabianmurariu.g4s.optim.GroupRef
+import com.github.fabianmurariu.g4s.optim.logic.GroupRef
 
 import scala.collection.mutable
 

@@ -1,6 +1,7 @@
 package com.github.fabianmurariu.g4s.optim
 
 import com.github.fabianmurariu.g4s.optim.impls.Operator
+import com.github.fabianmurariu.g4s.optim.logic.LogicNode
 import com.github.fabianmurariu.g4s.optim.rules.Rule
 
 sealed abstract class GroupMember { self =>

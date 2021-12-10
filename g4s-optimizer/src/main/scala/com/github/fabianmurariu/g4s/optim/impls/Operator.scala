@@ -12,10 +12,10 @@ import cats.effect.kernel.MonadCancel
 import cats.effect.unsafe.IORuntime
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.optim.EvaluatorGraph
-import com.github.fabianmurariu.g4s.optim.LogicMemoRefV2
 import com.github.fabianmurariu.g4s.optim.MemoV2
 import com.github.fabianmurariu.g4s.optim.EvaluatedGroupMember
 import com.github.fabianmurariu.g4s.optim.CostedGroupMember
+import com.github.fabianmurariu.g4s.optim.logic.LogicMemoRefV2
 
 /**
   * base class for push operators

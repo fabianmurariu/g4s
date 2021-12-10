@@ -1,6 +1,6 @@
 package com.github.fabianmurariu.g4s.columbia
 
-import com.github.fabianmurariu.g4s.optim.{Expand, Filter, GetEdges, GetNodes}
+import com.github.fabianmurariu.g4s.optim.logic.{Expand, Filter, GetEdges, GetNodes}
 
 sealed trait Pattern {
   def matchLevel(gExpr: GroupExpression, i: Int): Boolean

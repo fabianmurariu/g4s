@@ -4,10 +4,8 @@ import com.github.fabianmurariu.g4s.optim.{impls => op}
 import com.github.fabianmurariu.g4s.optim.rules.ImplementationRule
 import com.github.fabianmurariu.g4s.optim.GroupMember
 import com.github.fabianmurariu.g4s.optim.StatsStore
-import com.github.fabianmurariu.g4s.optim.Filter
-import com.github.fabianmurariu.g4s.optim.LogicMemoRefV2
 import com.github.fabianmurariu.g4s.optim.EvaluatedGroupMember
-import com.github.fabianmurariu.g4s.optim.Join
+import com.github.fabianmurariu.g4s.optim.logic.{Filter, Join, LogicMemoRefV2}
 
 /**
   *  .. (a)-[]->(b)-[]->(c) return b
