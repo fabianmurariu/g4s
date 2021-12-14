@@ -7,7 +7,7 @@ import munit.FunSuite
 class ContextTest extends FunSuite {
   test("insert Expand into optimiser context") {
     val memo = Memo()
-    val ctx = Context(memo, StatsStore())
+    val ctx = Context(memo, StatsStore(), new CostModel {})
 
     val filter = Filter(
       Expand(
@@ -28,7 +28,7 @@ class ContextTest extends FunSuite {
   }
   test("insert Filter into optimiser context") {
     val memo = Memo()
-    val ctx = Context(memo, StatsStore())
+    val ctx = Context(memo, StatsStore(), new CostModel {})
 
     val filter = Filter(
       Expand(
@@ -45,7 +45,7 @@ class ContextTest extends FunSuite {
     "insert Filter into optimiser context, run GroupExpressionBindingIterator 1 level"
   ) {
     val memo = Memo()
-    val ctx = Context(memo, StatsStore())
+    val ctx = Context(memo, StatsStore(), new CostModel {})
 
     val filter = Filter(
       Expand(
@@ -68,7 +68,7 @@ class ContextTest extends FunSuite {
     "insert Filter into optimiser context, run GroupExpressionBindingIterator 2 level".only
   ) {
     val memo = Memo()
-    val ctx = Context(memo, StatsStore())
+    val ctx = Context(memo, StatsStore(), new CostModel {})
 
     val filter = Filter(
       Expand(

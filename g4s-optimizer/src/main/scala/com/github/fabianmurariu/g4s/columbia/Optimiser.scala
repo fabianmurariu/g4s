@@ -13,7 +13,7 @@ class Optimiser {
     val rootGroup = ctx.memo.getGroupById(rootGroupId)
     rootGroup.bestExpression
       .collect {
-        case GroupExpression(PhysicalOptN(operator), _, _) =>
+        case (GroupExpression(PhysicalOptN(operator), _, _, _), _) =>
           Right(operator)
       }
       .getOrElse(Left(FailedToOptimisePlan))
@@ -24,7 +24,7 @@ class Optimiser {
       rootGroupId: Int
   ): Either[OptimiserError, Operator] = {
     while (!ctx.isEmpty) {
-      ctx.pop().foreach(_.apply(ctx))
+      ctx.pop().foreach(_.apply())
     }
     bestPlanToOperator(ctx, rootGroupId)
   }
@@ -36,13 +36,18 @@ class Optimiser {
   ): Either[OptimiserError, Operator] = {
     val optimNode = LogicOptN(rootPlan)
     val memo = new Memo()
-    val context = new Context(memo, ss)
+    val context = new Context(memo, ss, new CostModel {})
     val rootExpr = context.recordOptimiserNodeIntoGroup(optimNode)
 
     rootExpr match {
       case None => Left(FailedToRecordOptimiserNode)
       case Some(expr) =>
-        context.push(new OptimiseGroup(memo.getGroupById(expr.groupId)))
+        context.push(
+          new OptimiseGroup(
+            memo.getGroupById(expr.groupId),
+            new OptimisationContext(context)
+          )
+        )
         optimiserLoop(context, expr.groupId)
     }
   }

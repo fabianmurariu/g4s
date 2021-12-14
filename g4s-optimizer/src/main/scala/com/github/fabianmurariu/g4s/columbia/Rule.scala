@@ -1,8 +1,10 @@
 package com.github.fabianmurariu.g4s.columbia
 
-trait Rule extends (OptimiserNode => Vector[OptimiserNode]) {
+import com.github.fabianmurariu.g4s.optim.StatsStore
+
+trait Rule extends ((OptimiserNode, StatsStore) => Vector[OptimiserNode]) {
 
   def pattern: Pattern
 
-  def id:Int
+  def id: Int
 }

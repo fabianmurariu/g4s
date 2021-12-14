@@ -1,5 +1,6 @@
 package com.github.fabianmurariu.g4s.optim.logic
 
+import com.github.fabianmurariu.g4s.columbia.GroupRef
 import com.github.fabianmurariu.g4s.optim._
 
 import scala.collection.mutable.ArrayBuffer
@@ -92,7 +93,7 @@ case class LogicMemoRefV2(logic: LogicNode)
   def plan: LogicNode = children.next()
 }
 
-case class GroupRef(groupId: Int) extends LogicNode {
+case class LogicGroupRef(groupId: Int) extends LogicNode with GroupRef{
   override def output: Seq[Name] = Seq.empty
 }
 

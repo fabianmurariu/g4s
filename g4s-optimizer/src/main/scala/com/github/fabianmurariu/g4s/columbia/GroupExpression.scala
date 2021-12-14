@@ -5,8 +5,18 @@ import scala.collection.mutable
 case class GroupExpression(
     node: OptimiserNode,
     childGroups: Vector[Int],
-    var groupId: Int = -1
+    var groupId: Int = -1,
+    var bestCost: Option[Double] = None
 )(rulesApplied: mutable.BitSet = mutable.BitSet.empty) {
+
+  def updateBestCost(curTotalCost: Double): Unit = bestCost match {
+    case None =>
+      bestCost = Some(curTotalCost)
+    case Some(current) if current > curTotalCost =>
+      bestCost = Some(curTotalCost)
+    case _ => ()
+  }
+
   var statsDerived: Boolean = false
 
   def setStatsDerived(): Unit =

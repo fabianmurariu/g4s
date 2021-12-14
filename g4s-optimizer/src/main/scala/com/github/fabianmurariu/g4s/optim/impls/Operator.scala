@@ -10,6 +10,7 @@ import com.github.fabianmurariu.g4s.optim.Binding
 import com.github.fabianmurariu.g4s.optim.UnNamed
 import cats.effect.kernel.MonadCancel
 import cats.effect.unsafe.IORuntime
+import com.github.fabianmurariu.g4s.columbia.GroupRef
 import com.github.fabianmurariu.g4s.sparse.grb.BuiltInBinaryOps
 import com.github.fabianmurariu.g4s.optim.EvaluatorGraph
 import com.github.fabianmurariu.g4s.optim.MemoV2
@@ -21,7 +22,7 @@ import com.github.fabianmurariu.g4s.optim.logic.LogicMemoRefV2
   * base class for push operators
   * inspired by "How to Architect a Query Compiler, Revised" Ruby T Tahboub, et al.
   */
-sealed abstract class Operator(val children: Vector[Operator] = Vector.empty) {
+abstract class Operator(val children: Vector[Operator] = Vector.empty) {
   self =>
 
   def eval(eg: EvaluatorGraph)(cb: Record => IO[Unit])(
@@ -348,7 +349,28 @@ case class Diag(op: Operator) extends ForkOperator(Vector(op)) {
   override def rewrite(children: Vector[Operator]): ForkOperator =
     Diag(children(0))
 }
+case class PhysicalGroupRef(groupId: Int) extends Operator with GroupRef {
+  override def eval(eg: EvaluatorGraph)(cb: Record => IO[Unit])(
+      implicit G: GRB
+  ): IO[Unit] = IO.unit
 
+  /**
+    * The binding on which the operator output is sorted
+    *
+    * @return
+    */
+  override def sorted: Option[Name] = None
+
+  /**
+    * What bindings are covered by this operator
+    * [A]
+    *
+    * or [A, B]
+    *
+    * @return
+    */
+  override def output: Seq[Name] = Seq.empty
+}
 import scala.collection.mutable
 
 //FIXME: trivial renderer that will push every item onto a buffer

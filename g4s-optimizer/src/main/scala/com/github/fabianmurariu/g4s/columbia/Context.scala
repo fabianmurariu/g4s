@@ -9,10 +9,12 @@ import scala.collection.mutable.ArrayBuffer
 case class Context(
     memo: Memo,
     stats: StatsStore,
+    costModel: CostModel,
     stack: mutable.ArrayDeque[OptimiserTask] = mutable.ArrayDeque.empty,
     transformationRules: Vector[Rule] = Vector.empty,
     implementationRules: Vector[Rule] = Vector.empty
 ) {
+
   def push(task: OptimiserTask): Context = {
     stack.append(task)
     this
