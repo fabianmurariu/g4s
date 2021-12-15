@@ -1,7 +1,7 @@
 package com.github.fabianmurariu.g4s.columbia
 
 import com.github.fabianmurariu.g4s.optim.StatsStore
-import com.github.fabianmurariu.g4s.optim.logic.{Expand, Filter, GetEdges, GetNodes, GroupRef}
+import com.github.fabianmurariu.g4s.optim.logic.{Expand, Filter, GetEdges, GetNodes, LogicGroupRef}
 import munit.FunSuite
 
 class ContextTest extends FunSuite {
@@ -61,7 +61,7 @@ class ContextTest extends FunSuite {
 
     assertEquals(iter.hasNext, true)
     val item = iter.next()
-    assertEquals(item, LogicOptN(Filter(GroupRef(2), GroupRef(3))))
+    assertEquals(item, LogicOptN(Filter(LogicGroupRef(2), LogicGroupRef(3))))
     assertEquals(iter.hasNext, false)
   }
   test(
@@ -86,7 +86,7 @@ class ContextTest extends FunSuite {
     val item = iter.next()
     assertEquals(
       item,
-      LogicOptN(Filter(Expand(GroupRef(0), GroupRef(1)), GroupRef(3)))
+      LogicOptN(Filter(Expand(LogicGroupRef(0), LogicGroupRef(1)), LogicGroupRef(3)))
     )
     assertEquals(iter.hasNext, false)
   }

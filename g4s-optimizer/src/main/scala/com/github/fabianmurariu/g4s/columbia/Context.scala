@@ -1,7 +1,8 @@
 package com.github.fabianmurariu.g4s.columbia
 
 import com.github.fabianmurariu.g4s.optim.StatsStore
-import com.github.fabianmurariu.g4s.optim.logic.GroupRef
+import com.github.fabianmurariu.g4s.optim.impls.PhysicalGroupRef
+import com.github.fabianmurariu.g4s.optim.logic.LogicGroupRef
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -39,7 +40,9 @@ case class Context(
     val childGroups = ArrayBuffer.empty[Int]
     for (child <- node.getChildren) {
       child match {
-        case LogicOptN(GroupRef(childGroup)) =>
+        case LogicOptN(LogicGroupRef(childGroup)) =>
+          childGroups += childGroup
+        case PhysicalOptN(PhysicalGroupRef(childGroup)) =>
           childGroups += childGroup
         case optimNode =>
           val gExpr = makeGroupExpression(optimNode)

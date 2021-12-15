@@ -1,16 +1,9 @@
 package com.github.fabianmurariu.g4s.columbia.rules
 
-import com.github.fabianmurariu.g4s.columbia.{
-  GetEdgesPat,
-  LogicOptN,
-  OptimiserNode,
-  Pattern,
-  PhysicalOptN,
-  Rule
-}
+import com.github.fabianmurariu.g4s.columbia._
+import com.github.fabianmurariu.g4s.optim.impls.GetEdgeMatrix
+import com.github.fabianmurariu.g4s.optim.logic.GetEdges
 import com.github.fabianmurariu.g4s.optim.{StatsStore, UnNamed}
-import com.github.fabianmurariu.g4s.optim.impls.{GetEdgeMatrix, GetNodeMatrix}
-import com.github.fabianmurariu.g4s.optim.logic.{GetEdges, GetNodes}
 
 class EdgeMatrixRule extends Rule {
   override def pattern: Pattern = GetEdgesPat

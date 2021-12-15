@@ -1,6 +1,7 @@
 package com.github.fabianmurariu.g4s.columbia
 
-import com.github.fabianmurariu.g4s.optim.logic.GroupRef
+
+import com.github.fabianmurariu.g4s.optim.logic.LogicGroupRef
 
 import scala.collection.mutable
 
@@ -25,7 +26,7 @@ case class Memo(
       targetGroupId: Int = -1
   ): Option[GroupExpression] = {
     gExpr.node match {
-      case LogicOptN(GroupRef(groupId)) =>
+      case LogicOptN(LogicGroupRef(groupId)) =>
         gExpr.setGroupId(groupId)
         None
       case _ =>

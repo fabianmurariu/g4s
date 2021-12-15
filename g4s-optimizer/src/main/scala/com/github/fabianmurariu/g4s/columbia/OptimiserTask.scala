@@ -24,7 +24,7 @@ sealed trait OptimiserTask extends (() => Unit) {
 
     rules
       .foldLeft(Vector.newBuilder[Rule]) { (b, rule) =>
-        val missMatch: Boolean = !rule.pattern.matchLevel(gExpr, 2)
+        val missMatch: Boolean = !rule.pattern.isMatch(gExpr.node)
         val alreadyExplored: Boolean = gExpr.hasRuleExplored(rule)
 
         if (missMatch || alreadyExplored)
@@ -34,10 +34,33 @@ sealed trait OptimiserTask extends (() => Unit) {
       }
       .result()
   }
+
+  def perform(): Unit = {
+    println(s"Running ${this.getClass}")
+    apply()
+  }
 }
 
-class OptimiseGroup(group: Group, val optContext: OptimisationContext)
-    extends OptimiserTask {
+trait HasGroup extends OptimiserTask {
+  def group: Group
+
+  override def perform(): Unit = {
+    println(s"Running ${this.getClass} for ${group}")
+    apply()
+  }
+}
+
+trait HasGroupExpression extends OptimiserTask {
+  def expr: GroupExpression
+
+  override def perform(): Unit = {
+    println(s"Running ${this.getClass} for ${expr}")
+    apply()
+  }
+}
+
+class OptimiseGroup(val group: Group, val optContext: OptimisationContext)
+    extends HasGroup {
   override def apply(): Unit = {
     if (group.getCostLB > optContext.getCostUpperBound) return
 
@@ -57,9 +80,9 @@ class OptimiseGroup(group: Group, val optContext: OptimisationContext)
 }
 
 class OptimiseExpression(
-    expr: GroupExpression,
+    val expr: GroupExpression,
     val optContext: OptimisationContext
-) extends OptimiserTask {
+) extends HasGroupExpression {
   override def apply(): Unit = {
     val ctx = optContext.getContext
     val transform = constructValidRules(expr, ctx.transformationRules)
@@ -75,8 +98,8 @@ class OptimiseExpression(
 
 }
 
-class ExploreGroup(group: Group, val optContext: OptimisationContext)
-    extends OptimiserTask {
+class ExploreGroup(val group: Group, val optContext: OptimisationContext)
+    extends HasGroup {
   override def apply(): Unit = {
     val ctx = optContext.getContext
     if (!group.isExplored) {
@@ -89,9 +112,9 @@ class ExploreGroup(group: Group, val optContext: OptimisationContext)
 }
 
 class ExploreExpression(
-    expr: GroupExpression,
+    val expr: GroupExpression,
     val optContext: OptimisationContext
-) extends OptimiserTask {
+) extends HasGroupExpression {
   override def apply(): Unit = {
     val ctx = optContext.getContext
     val transform = constructValidRules(expr, ctx.transformationRules)
@@ -103,12 +126,12 @@ class ExploreExpression(
 }
 
 class OptimiseExpressionCost(
-    expr: GroupExpression,
+    val expr: GroupExpression,
     val optContext: OptimisationContext,
     var curChildIndex: Int = -1,
     var prevChildIndex: Int = -1,
     var curTotalCost: Double = 0d
-) extends OptimiserTask {
+) extends HasGroupExpression {
   import scala.util.control.Breaks
 
   override def apply(): Unit = {
@@ -150,8 +173,10 @@ class OptimiseExpressionCost(
           curGroup.setExpressionCost(expr, curTotalCost)
         }
 
-        if (curTotalCost  <= optContext.getCostUpperBound) {
-          optContext.setCostUpperBound(optContext.getCostUpperBound - curTotalCost)
+        if (curTotalCost <= optContext.getCostUpperBound) {
+          optContext.setCostUpperBound(
+            optContext.getCostUpperBound - curTotalCost
+          )
           val curGroup = ctx.memo.getGroupById(expr.groupId)
           curGroup.setExpressionCost(expr, curTotalCost)
         }
@@ -166,18 +191,18 @@ class OptimiseExpressionCost(
 
 class ApplyRule(
     rule: Rule,
-    groupExpr: GroupExpression,
+    val expr: GroupExpression,
     val optContext: OptimisationContext,
     exploreOnly: Boolean = false
-) extends OptimiserTask {
+) extends HasGroupExpression {
   override def apply(): Unit = {
     val ctx = optContext.getContext
-    if (!groupExpr.hasRuleExplored(rule)) {
+    if (!expr.hasRuleExplored(rule)) {
       val iterator =
-        GroupExpressionBindingIterator(ctx.memo, groupExpr, rule.pattern)
+        GroupExpressionBindingIterator(ctx.memo, expr, rule.pattern)
 
       while (iterator.hasNext) {
-        val gId = groupExpr.groupId
+        val gId = expr.groupId
         val node = iterator.next()
         // we just assume the rule applies
         val newExpressions = rule(node, ctx.stats)
@@ -185,8 +210,8 @@ class ApplyRule(
 
           ctx.recordOptimiserNodeIntoGroup(newExpr, gId).foreach {
             newGroupExpr =>
-              ctx.push(new DeriveStats(newGroupExpr, optContext))
               if (newGroupExpr.isLogical) {
+                ctx.push(new DeriveStats(newGroupExpr, optContext))
                 if (exploreOnly)
                   ctx.push(new ExploreExpression(newGroupExpr, optContext))
                 else
@@ -199,31 +224,31 @@ class ApplyRule(
         }
       }
 
-      groupExpr.setExplored(rule)
+      expr.setExplored(rule)
     }
   }
 }
 
 class DeriveStats(
-    gExpr: GroupExpression,
+    val expr: GroupExpression,
     val optContext: OptimisationContext,
     var childrenDerived: Boolean = false
-) extends OptimiserTask {
+) extends HasGroupExpression {
 
   override def apply(): Unit = {
     val ctx = optContext.getContext
     if (!childrenDerived) {
       childrenDerived = true
       ctx.push(this)
-      for (childGroupId <- gExpr.childGroups) {
+      for (childGroupId <- expr.childGroups) {
         // TODO we currently pick the first expr, we should pick the one with the highest confidence
         val childGroupExpr =
           ctx.memo.getGroupById(childGroupId).logicalExprs.head
         ctx.push(new DeriveStats(childGroupExpr, optContext))
       }
     } else {
-      StatsCalculator.calculateStats(gExpr, ctx)
-      gExpr.setStatsDerived()
+      StatsCalculator.calculateStats(expr, ctx)
+      expr.setStatsDerived()
     }
   }
 }

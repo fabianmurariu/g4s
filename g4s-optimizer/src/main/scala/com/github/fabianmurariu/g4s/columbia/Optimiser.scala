@@ -1,5 +1,11 @@
 package com.github.fabianmurariu.g4s.columbia
 
+import com.github.fabianmurariu.g4s.columbia.rules.{
+  EdgeMatrixRule,
+  ExpandImplRule,
+  FilterImplRule,
+  NodeMatrixRule
+}
 import com.github.fabianmurariu.g4s.optim.{QueryGraph, StatsStore}
 import com.github.fabianmurariu.g4s.optim.impls.Operator
 import com.github.fabianmurariu.g4s.optim.logic.LogicNode
@@ -24,30 +30,42 @@ class Optimiser {
       rootGroupId: Int
   ): Either[OptimiserError, Operator] = {
     while (!ctx.isEmpty) {
-      ctx.pop().foreach(_.apply())
+      ctx.pop().foreach(_.perform())
     }
     bestPlanToOperator(ctx, rootGroupId)
   }
 
   def chooseBestPlan(
       rootPlan: LogicNode,
-      qg: QueryGraph,
+//      qg: QueryGraph,
       ss: StatsStore
   ): Either[OptimiserError, Operator] = {
     val optimNode = LogicOptN(rootPlan)
-    val memo = new Memo()
-    val context = new Context(memo, ss, new CostModel {})
+    val memo = Memo()
+    val context = Context(
+      memo,
+      ss,
+      new CostModel {},
+      implementationRules = Vector(
+        new NodeMatrixRule,
+        new EdgeMatrixRule,
+        new ExpandImplRule,
+        new FilterImplRule
+      )
+    )
     val rootExpr = context.recordOptimiserNodeIntoGroup(optimNode)
 
     rootExpr match {
       case None => Left(FailedToRecordOptimiserNode)
       case Some(expr) =>
+        val context1 = new OptimisationContext(context)
         context.push(
           new OptimiseGroup(
             memo.getGroupById(expr.groupId),
-            new OptimisationContext(context)
+            context1
           )
         )
+        context.push(new DeriveStats(expr, context1))
         optimiserLoop(context, expr.groupId)
     }
   }

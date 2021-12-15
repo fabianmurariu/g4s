@@ -1,18 +1,15 @@
 package com.github.fabianmurariu.g4s.columbia
 
 import com.github.fabianmurariu.g4s.optim.impls.ForkOperator
-import com.github.fabianmurariu.g4s.optim.logic.GroupRef
-import com.github.fabianmurariu.g4s.optim.logic.{ForkNode, GroupRef}
+import com.github.fabianmurariu.g4s.optim.logic.{ForkNode, LogicGroupRef}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.Breaks
-
 
 /**
   *
   *  !!!! this is a direct translation from C++ code, it's awful !!!!
   */
-
 sealed abstract class BindingIterator(memo: Memo)
     extends Iterator[OptimiserNode] {}
 
@@ -64,7 +61,7 @@ case class GroupBindingIterator(memo: Memo, groupId: Int, pattern: Pattern)
   override def next(): OptimiserNode = {
     if (pattern == AnyMatch) {
       currentItemIndex = numGroupItems
-      LogicOptN(GroupRef(groupId))
+      LogicOptN(LogicGroupRef(groupId))
     } else {
       currentIterator.map(_.next()).get
     }
@@ -108,7 +105,10 @@ case class GroupExpressionBindingIterator(
   has_next = true
   currentBinding = rewireBindings(gExpr.node, children)
 
-  def rewireBindings(node:OptimiserNode, children:Iterable[OptimiserNode]): Option[OptimiserNode] = {
+  def rewireBindings(
+      node: OptimiserNode,
+      children: Iterable[OptimiserNode]
+  ): Option[OptimiserNode] = {
     node match {
       case LogicOptN(logic: ForkNode) =>
         Some(
@@ -129,6 +129,7 @@ case class GroupExpressionBindingIterator(
             )
           )
         )
+      case node => Some(node)
     }
   }
 
@@ -142,15 +143,15 @@ case class GroupExpressionBindingIterator(
       var firstModifiedIdx = childrenBindingPos.size - 1
       val breaks = new Breaks
       import breaks.{breakable, break}
-      breakable{
+      breakable {
         while (firstModifiedIdx >= 0) {
           val childBinding = childrenBindings(firstModifiedIdx)
           var newPos = {
-            childrenBindingPos(firstModifiedIdx)+=1
+            childrenBindingPos(firstModifiedIdx) += 1
             childrenBindingPos(firstModifiedIdx)
           }
 
-          if (newPos >= childBinding.size){
+          if (newPos >= childBinding.size) {
             childrenBindingPos(firstModifiedIdx) = 0;
           } else {
             break
@@ -159,11 +160,11 @@ case class GroupExpressionBindingIterator(
         }
       }
 
-      if (firstModifiedIdx < 0 ){
+      if (firstModifiedIdx < 0) {
         has_next = false
       } else {
         val children = ArrayBuffer.empty[OptimiserNode]
-        for (i <- childrenBindingPos.indices){
+        for (i <- childrenBindingPos.indices) {
           val childBinding = childrenBindings(i)
           children += childBinding(childrenBindingPos(i))
           currentBinding = rewireBindings(gExpr.node, children)

@@ -2,6 +2,7 @@ package com.github.fabianmurariu.g4s.columbia.rules
 
 import com.github.fabianmurariu.g4s.columbia.{
   GetEdgesPat,
+  GetNodesPat,
   LogicOptN,
   OptimiserNode,
   Pattern,
@@ -13,7 +14,7 @@ import com.github.fabianmurariu.g4s.optim.logic.GetNodes
 import com.github.fabianmurariu.g4s.optim.{StatsStore, UnNamed}
 
 class NodeMatrixRule extends Rule {
-  override def pattern: Pattern = GetEdgesPat
+  override def pattern: Pattern = GetNodesPat
 
   override def id: Int = this.hashCode()
 
