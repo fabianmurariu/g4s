@@ -8,3 +8,6 @@ trait Rule extends ((OptimiserNode, StatsStore) => Vector[OptimiserNode]) {
 
   def id: Int
 }
+
+trait TransRule extends Rule
+trait ImplRule extends Rule

@@ -80,7 +80,8 @@ case class GroupExpressionBindingIterator(
   val childGroups: Vector[Int] = gExpr.childGroups
   val childPatterns: Vector[Pattern] = pattern.children
 
-  assert(childGroups.size == childPatterns.size)
+  val valid: Boolean = childGroups.size == childPatterns.size
+//  assert(childGroups.size == childPatterns.size)
 
   var childrenBindings: ArrayBuffer[ArrayBuffer[OptimiserNode]] =
     ArrayBuffer.fill(childGroups.size)(ArrayBuffer.empty)
@@ -89,21 +90,33 @@ case class GroupExpressionBindingIterator(
     ArrayBuffer.fill(childGroups.size)(0)
 
   val children: ArrayBuffer[OptimiserNode] = ArrayBuffer.empty
+  val breaks = new Breaks
+  import breaks.{breakable, break}
 
-  for (i <- childGroups.indices) {
-    val childBindings = childrenBindings(i)
-    val iterator = GroupBindingIterator(memo, childGroups(i), childPatterns(i))
-    while (iterator.hasNext) {
-      childBindings += iterator.next()
+  var continue = true
+
+  if (valid) {
+    breakable {
+      for (i <- childGroups.indices) {
+        val childBindings = childrenBindings(i)
+        val iterator =
+          GroupBindingIterator(memo, childGroups(i), childPatterns(i))
+        while (iterator.hasNext) {
+          childBindings += iterator.next()
+        }
+
+        if (childBindings.isEmpty) {
+          continue = false
+          break()
+        }
+        children += childBindings(0)
+      }
     }
-
-    assert(childBindings.nonEmpty)
-
-    children += childBindings(0)
   }
 
-  has_next = true
-  currentBinding = rewireBindings(gExpr.node, children)
+  has_next = valid && continue
+  currentBinding =
+    if (valid && continue) rewireBindings(gExpr.node, children) else None
 
   def rewireBindings(
       node: OptimiserNode,

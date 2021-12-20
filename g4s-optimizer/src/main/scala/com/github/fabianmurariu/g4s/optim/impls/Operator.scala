@@ -111,7 +111,7 @@ sealed abstract class ForkOperator(cs: Vector[Operator]) extends Operator(cs) {
 object Operator {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
-    Expand.staticAnyPairSemiring
+    MatrixMulUtils.staticAnyPairSemiring
 
   def relativeCost(m: MemoV2, op: Operator): (Double, Long) = op match {
     case RefOperator(logic) =>
@@ -274,7 +274,7 @@ case class ExpandMul(
 ) extends ForkOperator(Vector(frontier, edges)) {
 
   lazy val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
-    Expand.staticAnyPairSemiring //FIXME get rid of this
+    MatrixMulUtils.staticAnyPairSemiring //FIXME get rid of this
 
   def eval(
       eg: EvaluatorGraph
@@ -302,7 +302,7 @@ case class FilterMul(
 ) extends ForkOperator(Vector(frontier, filter)) {
 
   val semiRing: GrBSemiring[Boolean, Boolean, Boolean] =
-    Expand.staticAnyPairSemiring
+    MatrixMulUtils.staticAnyPairSemiring
 
   def eval(
       eg: EvaluatorGraph
@@ -398,7 +398,7 @@ case class MatrixTuples(op: Operator) extends Operator(Vector(op)) {
 
 }
 
-object Expand {
+object MatrixMulUtils {
 
   import com.github.fabianmurariu.g4s.sparse.grb.GRB.async.grb
 

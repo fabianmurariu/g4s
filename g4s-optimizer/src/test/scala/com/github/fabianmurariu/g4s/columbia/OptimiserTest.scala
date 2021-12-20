@@ -19,9 +19,8 @@ class OptimiserTest extends FunSuite {
       to = GetEdges(List("X"))
     )
 
-    val actual = optimiser.chooseBestPlan(logical, StatsStore())
-    println(actual)
-    assertEquals(actual.isRight, true)
+    val Right(actual) = optimiser.chooseBestPlan(logical, StatsStore())
+    println(actual.show(null))
   }
 
   test("optimise a 2 step expand and filter (a:A)-[:Y]->(b:B) to physical plan") {
@@ -35,9 +34,33 @@ class OptimiserTest extends FunSuite {
       GetNodes("B", "b")
     )
 
-    val actual = optimiser.chooseBestPlan(logical, StatsStore())
-    println(actual)
-    assertEquals(actual.isRight, true)
+    val Right(actual) = optimiser.chooseBestPlan(logical, StatsStore())
+    println(actual.show(null))
+  }
+
+  test(
+    "optimise a 2 step expand and filter to physical plan with StatsStore hints"
+  ) {
+    val optimiser = new Optimiser
+
+    val logical = Filter(
+      Expand(
+        from = GetNodes("A", "a"),
+        to = GetEdges(List("X"))
+      ),
+      GetNodes("B", "b")
+    )
+
+    val ss = StatsStore()
+
+    ss.addNode("B")
+
+    (1 to 5).foreach { _ => ss.addNode("A") }
+
+    (1 to 4).foreach { _ => ss.addEdge("X") }
+
+    val Right(actual) = optimiser.chooseBestPlan(logical, ss)
+    println(actual.show(null))
   }
 
 }

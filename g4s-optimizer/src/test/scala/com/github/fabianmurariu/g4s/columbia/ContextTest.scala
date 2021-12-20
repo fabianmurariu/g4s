@@ -23,8 +23,8 @@ class ContextTest extends FunSuite {
         GetNodes("B", "b")
       )
     )
-    ctx.recordOptimiserNodeIntoGroup(LogicOptN(expand))
-    println(memo)
+    val Some(groupExpr) = ctx.recordOptimiserNodeIntoGroup(LogicOptN(expand))
+    println(groupExpr)
   }
   test("insert Filter into optimiser context") {
     val memo = Memo()
@@ -38,7 +38,7 @@ class ContextTest extends FunSuite {
       GetNodes("B", "b")
     )
     val Some(groupExpr) = ctx.recordOptimiserNodeIntoGroup(LogicOptN(filter))
-    println(memo)
+    println(groupExpr)
   }
 
   test(
@@ -65,7 +65,7 @@ class ContextTest extends FunSuite {
     assertEquals(iter.hasNext, false)
   }
   test(
-    "insert Filter into optimiser context, run GroupExpressionBindingIterator 2 level".only
+    "insert Filter into optimiser context, run GroupExpressionBindingIterator 2 level"
   ) {
     val memo = Memo()
     val ctx = Context(memo, StatsStore(), new CostModel {})

@@ -1,19 +1,11 @@
 package com.github.fabianmurariu.g4s.columbia.rules
 
-import com.github.fabianmurariu.g4s.columbia.{
-  GetEdgesPat,
-  GetNodesPat,
-  LogicOptN,
-  OptimiserNode,
-  Pattern,
-  PhysicalOptN,
-  Rule
-}
+import com.github.fabianmurariu.g4s.columbia._
 import com.github.fabianmurariu.g4s.optim.impls.GetNodeMatrix
 import com.github.fabianmurariu.g4s.optim.logic.GetNodes
 import com.github.fabianmurariu.g4s.optim.{StatsStore, UnNamed}
 
-class NodeMatrixRule extends Rule {
+class NodeMatrixRule extends ImplRule {
   override def pattern: Pattern = GetNodesPat
 
   override def id: Int = this.hashCode()

@@ -1,6 +1,5 @@
 package com.github.fabianmurariu.g4s.columbia
 
-
 import com.github.fabianmurariu.g4s.optim.logic.LogicGroupRef
 
 import scala.collection.mutable

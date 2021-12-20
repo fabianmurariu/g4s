@@ -3,11 +3,12 @@ package com.github.fabianmurariu.g4s.columbia
 import com.github.fabianmurariu.g4s.columbia.rules.{
   EdgeMatrixRule,
   ExpandImplRule,
+  FilterExpandEquivRule,
   FilterImplRule,
   NodeMatrixRule
 }
 import com.github.fabianmurariu.g4s.optim.{QueryGraph, StatsStore}
-import com.github.fabianmurariu.g4s.optim.impls.Operator
+import com.github.fabianmurariu.g4s.optim.impls.{ForkOperator, Operator}
 import com.github.fabianmurariu.g4s.optim.logic.LogicNode
 
 class Optimiser {
@@ -17,11 +18,26 @@ class Optimiser {
       rootGroupId: Int
   ): Either[OptimiserError, Operator] = {
     val rootGroup = ctx.memo.getGroupById(rootGroupId)
+
+    def groupExpressionToOperator(ge: GroupExpression): Operator = ge match {
+      case GroupExpression(
+          PhysicalOptN(operator: ForkOperator),
+          childGroups,
+          _,
+          _,
+          _
+          ) =>
+        val children = childGroups
+          .map(ctx.memo.getGroupById)
+          .flatMap(_.bestExpression)
+          .map { case (expr, _) => groupExpressionToOperator(expr) }
+        operator.rewrite(children)
+      case GroupExpression(PhysicalOptN(operator), _, _, _, _) =>
+        operator
+    }
+
     rootGroup.bestExpression
-      .collect {
-        case (GroupExpression(PhysicalOptN(operator), _, _, _), _) =>
-          Right(operator)
-      }
+      .map { case (expr, _) => Right(groupExpressionToOperator(expr)) }
       .getOrElse(Left(FailedToOptimisePlan))
   }
 
@@ -30,14 +46,13 @@ class Optimiser {
       rootGroupId: Int
   ): Either[OptimiserError, Operator] = {
     while (!ctx.isEmpty) {
-      ctx.pop().foreach(_.perform())
+      ctx.pop().foreach { task => task.perform() }
     }
     bestPlanToOperator(ctx, rootGroupId)
   }
 
   def chooseBestPlan(
       rootPlan: LogicNode,
-//      qg: QueryGraph,
       ss: StatsStore
   ): Either[OptimiserError, Operator] = {
     val optimNode = LogicOptN(rootPlan)
@@ -51,6 +66,9 @@ class Optimiser {
         new EdgeMatrixRule,
         new ExpandImplRule,
         new FilterImplRule
+      ),
+      transformationRules = Vector(
+        new FilterExpandEquivRule
       )
     )
     val rootExpr = context.recordOptimiserNodeIntoGroup(optimNode)
@@ -68,6 +86,7 @@ class Optimiser {
         context.push(new DeriveStats(expr, context1))
         optimiserLoop(context, expr.groupId)
     }
+
   }
 
 }

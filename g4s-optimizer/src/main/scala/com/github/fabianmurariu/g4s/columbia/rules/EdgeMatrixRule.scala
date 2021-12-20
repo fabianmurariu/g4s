@@ -5,7 +5,7 @@ import com.github.fabianmurariu.g4s.optim.impls.GetEdgeMatrix
 import com.github.fabianmurariu.g4s.optim.logic.GetEdges
 import com.github.fabianmurariu.g4s.optim.{StatsStore, UnNamed}
 
-class EdgeMatrixRule extends Rule {
+class EdgeMatrixRule extends ImplRule {
   override def pattern: Pattern = GetEdgesPat
 
   override def id: Int = this.hashCode()

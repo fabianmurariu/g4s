@@ -1,19 +1,11 @@
 package com.github.fabianmurariu.g4s.columbia.rules
 
-import com.github.fabianmurariu.g4s.columbia.{
-  AnyMatch,
-  FilterPat,
-  LogicOptN,
-  OptimiserNode,
-  Pattern,
-  PhysicalOptN,
-  Rule
-}
+import com.github.fabianmurariu.g4s.columbia._
 import com.github.fabianmurariu.g4s.optim.StatsStore
 import com.github.fabianmurariu.g4s.optim.impls.{FilterMul, PhysicalGroupRef}
 import com.github.fabianmurariu.g4s.optim.logic.{Filter, LogicGroupRef}
 
-class FilterImplRule extends Rule {
+class FilterImplRule extends ImplRule {
   override def pattern: Pattern = FilterPat(AnyMatch, AnyMatch)
 
   override def id: Int = this.hashCode()

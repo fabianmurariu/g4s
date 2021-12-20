@@ -6,7 +6,8 @@ case class GroupExpression(
     node: OptimiserNode,
     childGroups: Vector[Int],
     var groupId: Int = -1,
-    var bestCost: Option[Double] = None
+    var bestCost: Option[Double] = None,
+    var statsDerived:Boolean = false
 )(rulesApplied: mutable.BitSet = mutable.BitSet.empty) {
 
   def updateBestCost(curTotalCost: Double): Unit = bestCost match {
@@ -16,8 +17,6 @@ case class GroupExpression(
       bestCost = Some(curTotalCost)
     case _ => ()
   }
-
-  var statsDerived: Boolean = false
 
   def setStatsDerived(): Unit =
     statsDerived = true
