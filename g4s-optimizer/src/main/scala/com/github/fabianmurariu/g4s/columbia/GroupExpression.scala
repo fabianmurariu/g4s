@@ -8,7 +8,7 @@ case class GroupExpression(
     var groupId: Int = -1,
     var bestCost: Option[Double] = None,
     var statsDerived:Boolean = false
-)(rulesApplied: mutable.BitSet = mutable.BitSet.empty) {
+)(rulesApplied: mutable.Set[Int] = mutable.Set.empty) {
 
   def updateBestCost(curTotalCost: Double): Unit = bestCost match {
     case None =>

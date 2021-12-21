@@ -8,7 +8,7 @@
         </encoder>
     </appender>
 
-    <logger name="com.github.fabianmurariu" level="ERROR"/>
+<!--    <logger name="com.github.fabianmurariu" level="debug"/>-->
 
     <root level="ERROR">
         <appender-ref ref="STDOUT" />

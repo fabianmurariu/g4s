@@ -1,11 +1,12 @@
 package com.github.fabianmurariu.g4s.columbia
 
-import com.github.fabianmurariu.g4s.optim.StatsStore
+import com.github.fabianmurariu.g4s.optim.{Binding, QueryGraph, StatsStore}
 import com.github.fabianmurariu.g4s.optim.logic.{
   Expand,
   Filter,
   GetEdges,
-  GetNodes
+  GetNodes,
+  LogicNode
 }
 import munit.FunSuite
 
@@ -23,7 +24,7 @@ class OptimiserTest extends FunSuite {
     println(actual.show(null))
   }
 
-  test("optimise a 2 step expand and filter (a:A)-[:Y]->(b:B) to physical plan") {
+  test("optimise a 2 step expand and filter (a:A)-[:X]->(b:B) to physical plan") {
     val optimiser = new Optimiser
 
     val logical = Filter(
@@ -63,4 +64,18 @@ class OptimiserTest extends FunSuite {
     println(actual.show(null))
   }
 
+  test(
+    "optimise a 3 step expand and filter (a:`fix.A`)-[:`fix.X`]->(b:`fix.B`)<-[:`fix.Y`]-(c:`fix.C`) to physical plan"
+  ) {
+    val optimiser = new Optimiser
+
+    val query =
+      """match (a:`fix.A`)-[:`fix.X`]->(b:`fix.B`)<-[:`fix.Y`]-(c:`fix.C`) return c"""
+
+    val Right(qg) = QueryGraph.fromCypherText(query)
+    val Right(logical) = LogicNode.fromQueryGraph(qg)(Binding("c"))
+
+    val Right(actual) = optimiser.chooseBestPlan(logical, StatsStore())
+    println(actual.show(null))
+  }
 }
