@@ -51,7 +51,7 @@ object StatsCalculator {
       // it can only remove columns
       // so it can be max(l_card * r_card * sel, l_card)
     } yield Math
-      .max(Math.max(leftCard * rightCard * sel, leftCard), 1.0d)
+      .max(Math.min(leftCard * rightCard * sel, leftCard), 1.0d)
       .toLong
 
     group.setCardinality(card.get)
